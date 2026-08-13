@@ -1,0 +1,39 @@
+# ============================================================
+# 🐾 PATITAS SOS — docker-compose.yml
+#
+# Levantar con:
+#   docker compose --env-file .env.local up --build -d
+#
+# La app queda expuesta en http://localhost:3000
+# ============================================================
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Se inyectan en build time (se incrustan en el bundle del cliente)
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    image: patitas-sos:latest
+    container_name: patitas-sos
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      # Variables secretas: se leen en runtime por las API Routes
+      NODE_ENV: production
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_REKOGNITION_COLLECTION_ID: ${AWS_REKOGNITION_COLLECTION_ID}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

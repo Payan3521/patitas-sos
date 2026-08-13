@@ -1,0 +1,21 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "rekognition:CreateCollection",
+                "rekognition:ListCollections",
+                "rekognition:IndexFaces",
+                "rekognition:SearchFacesByImage",
+                "rekognition:DeleteFaces",
+                "rekognition:ListFaces"
+            ],
+            "Resource": [
+                "arn:aws:rekognition:us-east-1:547254753016:collection/perritos",
+                "arn:aws:rekognition:us-east-1:547254753016:collection/*",
+                "*"
+            ]
+        }
+    ]
+}
