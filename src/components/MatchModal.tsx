@@ -64,7 +64,7 @@ export function MatchModal({ matchInfo, onClose }: Props) {
             <div className="min-w-0">
               <p className="font-bold text-neutral-900">{nombre}</p>
               <p className="mt-0.5 text-xs text-neutral-500">
-                📍 {perrito.ciudad}
+                📍 {perrito.departamento}, {perrito.ciudad}
                 {perrito.barrio_zona ? `, ${perrito.barrio_zona}` : ''}
               </p>
               <p className="mt-1 line-clamp-3 text-xs text-neutral-600">{perrito.descripcion}</p>
@@ -105,6 +105,13 @@ export function MatchModal({ matchInfo, onClose }: Props) {
               Cerrar y ver mi reporte
             </button>
           </div>
+
+          <p className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-xs leading-relaxed text-neutral-600">
+            💌 Tu reporte <b>sigue publicado</b>. También enviamos un correo a{' '}
+            {esRescatista ? 'la persona que busca a la mascota' : 'quien la encontró'} con tus datos
+            y esta coincidencia. Si confirma que es la misma mascota, ambos reportes pasarán a la
+            lista de <b>Encontradas</b>.
+          </p>
         </div>
       </div>
     </div>

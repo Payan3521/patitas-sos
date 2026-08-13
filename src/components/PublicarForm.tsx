@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { MatchModal } from '@/components/MatchModal';
+import { municipiosDe, DEPARTAMENTOS_NOMBRES } from '@/lib/colombia';
 import { compressImageToJpeg, formatBytes } from '@/lib/image-utils';
 import type { MatchInfo, PublicarResponse, RolPublicacion } from '@/lib/types';
 
@@ -15,6 +16,7 @@ const INITIAL_FORM = {
   email: '',
   nombreTemporal: '',
   descripcion: '',
+  departamento: '',
   ciudad: '',
   barrioZona: '',
 };
@@ -31,7 +33,6 @@ const inputCls =
 export function PublicarForm() {
   const [tab, setTab] = useState<Tab>('PERDIDO');
   const [form, setForm] = useState(INITIAL_FORM);
-  const [ciudades, setCiudades] = useState<string[]>([]);
 
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState('');
@@ -42,14 +43,6 @@ export function PublicarForm() {
   const [error, setError] = useState('');
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const [success, setSuccess] = useState(false);
-
-  // Ciudades para autocompletado
-  useEffect(() => {
-    fetch('/api/ciudades')
-      .then((res) => res.json())
-      .then((data) => setCiudades(data.ciudades ?? []))
-      .catch(() => {});
-  }, []);
 
   // Comprime la foto elegida a ≤ 200 KB antes de enviarla
   const handleFile = useCallback(async (file: File | null) => {
@@ -73,9 +66,23 @@ export function PublicarForm() {
 
   const setField =
     (key: keyof typeof INITIAL_FORM) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm((prev) => ({ ...prev, [key]: event.target.value }));
     };
+
+  /** Teléfono: solo dígitos, máximo 10 (el +57 va fijo). */
+  const setTelefono = (event: ChangeEvent<HTMLInputElement>) => {
+    let digits = event.target.value.replace(/\D/g, '');
+    // Si pegaron el número con indicativo (+57…) o con cero inicial, normalizar
+    if (digits.startsWith('57') && digits.length > 10) digits = digits.slice(2);
+    else if (digits.startsWith('0') && digits.length > 10) digits = digits.slice(1);
+    setForm((prev) => ({ ...prev, telefono: digits.slice(0, 10) }));
+  };
+
+  const setDepartamento = (event: ChangeEvent<HTMLSelectElement>) => {
+    const departamento = event.target.value;
+    setForm((prev) => ({ ...prev, departamento, ciudad: '' }));
+  };
 
   const resetForm = () => {
     setForm(INITIAL_FORM);
@@ -102,10 +109,11 @@ export function PublicarForm() {
       const formData = new FormData();
       formData.append('rol', tab);
       formData.append('nombre', form.nombre);
-      formData.append('telefono', form.telefono);
+      formData.append('telefono', `+57${form.telefono}`);
       formData.append('email', form.email);
       formData.append('nombre_temporal', form.nombreTemporal);
       formData.append('descripcion', form.descripcion);
+      formData.append('departamento', form.departamento);
       formData.append('ciudad', form.ciudad);
       formData.append('barrio_zona', form.barrioZona);
       formData.append('foto', foto);
@@ -235,25 +243,33 @@ export function PublicarForm() {
                 required
               />
             </Field>
-            <Field label="Teléfono (WhatsApp) *">
-              <input
-                type="tel"
-                inputMode="tel"
-                value={form.telefono}
-                onChange={setField('telefono')}
-                placeholder="Ej: +52 55 1234 5678"
-                className={inputCls}
-                required
-              />
+            <Field label="Teléfono móvil (WhatsApp) *">
+              <div className="flex items-center overflow-hidden rounded-xl border border-neutral-300 bg-white transition focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200">
+                <span className="border-r border-neutral-200 bg-neutral-100 px-3.5 py-2.5 text-sm font-bold text-neutral-700">
+                  +57
+                </span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.telefono}
+                  onChange={setTelefono}
+                  placeholder="300 123 4567"
+                  maxLength={10}
+                  pattern="3\d{9}"
+                  className="w-full bg-transparent px-3.5 py-2.5 text-sm outline-none"
+                  required
+                />
+              </div>
             </Field>
           </div>
-          <Field label="Email (opcional)">
+          <Field label="Email (obligatorio) *">
             <input
               type="email"
               value={form.email}
               onChange={setField('email')}
-              placeholder="Para recibir avisos"
+              placeholder="Aquí recibirás el aviso si encontramos a tu mascota"
               className={inputCls}
+              required
             />
           </Field>
         </div>
@@ -282,30 +298,48 @@ export function PublicarForm() {
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Ciudad *">
-              <input
-                list="ciudades"
-                value={form.ciudad}
-                onChange={setField('ciudad')}
-                placeholder="Ej: Ciudad de México"
+            <Field label="Departamento *">
+              <select
+                value={form.departamento}
+                onChange={setDepartamento}
                 className={inputCls}
                 required
-              />
-              <datalist id="ciudades">
-                {ciudades.map((ciudad) => (
-                  <option key={ciudad} value={ciudad} />
+              >
+                <option value="">Selecciona el departamento…</option>
+                {DEPARTAMENTOS_NOMBRES.map((departamento) => (
+                  <option key={departamento} value={departamento}>
+                    {departamento}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </Field>
-            <Field label="Barrio / Zona">
-              <input
-                value={form.barrioZona}
-                onChange={setField('barrioZona')}
-                placeholder="Ej: Col. Roma Norte"
+            <Field label="Ciudad / Municipio *">
+              <select
+                value={form.ciudad}
+                onChange={setField('ciudad')}
                 className={inputCls}
-              />
+                disabled={!form.departamento}
+                required
+              >
+                <option value="">
+                  {form.departamento ? 'Selecciona el municipio…' : 'Primero elige el departamento'}
+                </option>
+                {municipiosDe(form.departamento).map((municipio) => (
+                  <option key={municipio} value={municipio}>
+                    {municipio}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
+          <Field label="Dirección / Barrio">
+            <input
+              value={form.barrioZona}
+              onChange={setField('barrioZona')}
+              placeholder="Ej: Cra 7 # 45-12, Barrio Chapinero"
+              className={inputCls}
+            />
+          </Field>
         </div>
 
         {/* ---- Errores ---- */}
@@ -340,7 +374,7 @@ export function PublicarForm() {
           <h3 className="mt-2 text-xl font-black text-emerald-800">¡Reporte publicado!</h3>
           <p className="mt-1 text-sm text-emerald-700">
             Ya está visible en el feed. La IA no encontró coincidencias por ahora; si aparece una
-            nueva publicación con la misma cara, te contactaremos.
+            nueva publicación con la misma cara, te escribiremos a tu correo.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link

@@ -8,12 +8,11 @@ import { PetCard } from '@/components/PetCard';
 import { FEED_PAGE_SIZE } from '@/lib/constants';
 import type { FeedResponse, Perrito } from '@/lib/types';
 
-const EMPTY_FILTERS: FeedFilters = { ciudad: '', barrio: '', rol: '' };
+const EMPTY_FILTERS: FeedFilters = { categoria: 'todos', departamento: '', ciudad: '', barrio: '' };
 
-/** Home / Feed principal: reportes activos con scroll infinito y filtros. */
+/** Home / Feed principal: categorías con scroll infinito y filtros. */
 export default function HomePage() {
   const [perritos, setPerritos] = useState<Perrito[]>([]);
-  const [ciudades, setCiudades] = useState<string[]>([]);
   const [filters, setFilters] = useState<FeedFilters>(EMPTY_FILTERS);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -23,20 +22,19 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Ciudades para los filtros
-  useEffect(() => {
-    fetch('/api/ciudades')
-      .then((res) => res.json())
-      .then((data) => setCiudades(data.ciudades ?? []))
-      .catch(() => {});
-  }, []);
-
   const buildQuery = useCallback(
     (pageToLoad: number, size: number) => {
       const params = new URLSearchParams({ page: String(pageToLoad), pageSize: String(size) });
+      // Mapeo de la categoría del home a los filtros del API
+      if (filters.categoria === 'buscadas') params.set('rol', 'PERDIDO');
+      if (filters.categoria === 'buscan-dueno') params.set('rol', 'BUSCA_DUEÑO');
+      if (filters.categoria === 'encontradas') params.set('estado', 'ENCONTRADA');
+      if (filters.categoria === 'buscadas' || filters.categoria === 'buscan-dueno') {
+        params.set('estado', 'ACTIVO');
+      }
+      if (filters.departamento) params.set('departamento', filters.departamento);
       if (filters.ciudad) params.set('ciudad', filters.ciudad);
       if (filters.barrio) params.set('barrio', filters.barrio);
-      if (filters.rol) params.set('rol', filters.rol);
       return params.toString();
     },
     [filters],
@@ -100,11 +98,11 @@ export default function HomePage() {
         {/* Hero */}
         <section className="rounded-3xl bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 p-6 text-white shadow-lg sm:p-10">
           <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">
-            ¿Perdiste a tu perrito tras el sismo?
+            ¿Perdiste a tu mascota en Colombia?
           </h1>
           <p className="mt-2 max-w-xl text-orange-50">
-            Publica su foto y nuestra IA lo cruzará con los perritos rescatados en la zona.
-            Juntos los reunimos con sus familias. 💛
+            Publica su foto y nuestra IA la cruzará con las mascotas rescatadas en tu región.
+            Juntos las reunimos con sus familias. 💛
           </p>
           <div className="mt-5">
             <Link
@@ -118,7 +116,7 @@ export default function HomePage() {
 
         {/* Filtros */}
         <section className="mt-6">
-          <FilterBar ciudades={ciudades} filters={filters} onChange={setFilters} total={total} />
+          <FilterBar filters={filters} onChange={setFilters} total={total} />
         </section>
 
         {/* Feed */}
@@ -170,7 +168,7 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-neutral-200 bg-white py-6 text-center text-xs text-neutral-400">
-        🐾 Patitas SOS · Plataforma de ayuda humanitaria post-terremoto · Hecho con 💛
+        🐾 Patitas SOS · Conectamos mascotas perdidas con sus familias en Colombia · Hecho con 💛
       </footer>
     </div>
   );

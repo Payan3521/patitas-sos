@@ -9,9 +9,15 @@
 //   4. IndexFacesCommand → registra la cara en AWS Rekognition → FaceId.
 //   5. Guarda el reporte en la tabla `perritos` (incluye aws_face_id).
 //   6. SearchFacesByImageCommand con umbral 85.0 %.
-//   7. Si hay match con rol opuesto y reporte ACTIVO → registra en
-//      `matches_ia`, marca ambos como RECONCILIADO y devuelve
-//      `match: true` con los datos de contacto de la contraparte.
+//   7. Si hay match con rol opuesto y reporte ACTIVO:
+//      - Registra el par en `matches_ia` (SIN cambiar estados).
+//      - Notifica por EMAIL a ambas partes (dueño + rescatista) con
+//        enlace a la publicación y botón para marcar como encontrada.
+//      - Devuelve `match: true` con los datos de contacto de la contraparte.
+//
+// IMPORTANTE: la publicación NUNCA se elimina ni se reconcilia de forma
+// automática. Solo el dueño (o el publicador verificado) puede marcarla
+// como ENCONTRADA desde su página o desde el enlace del correo.
 // ============================================================
 
 import { randomUUID } from 'node:crypto';
@@ -25,6 +31,7 @@ import {
   searchFacesByImage,
   type FaceMatch,
 } from '@/lib/rekognition';
+import { notificarMatch } from '@/lib/mail';
 import { createServerSupabase } from '@/lib/supabase-server';
 import type { Perrito } from '@/lib/types';
 import { validatePublicarInput, type PublicarInput } from '@/lib/validators';
@@ -124,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     // --- 6. Guardar el reporte en `perritos` ---
-    const { data: perrito, error: insertError } = await supabase
+    const { data: perritoNuevo, error: insertError } = await supabase
       .from('perritos')
       .insert({
         id: perritoId,
@@ -132,6 +139,7 @@ export async function POST(request: NextRequest) {
         rol_publicacion: input.rol,
         nombre_temporal: input.nombreTemporal,
         descripcion: input.descripcion,
+        departamento: input.departamento,
         ciudad: input.ciudad,
         barrio_zona: input.barrioZona,
         foto_url: fotoUrl,
@@ -141,13 +149,14 @@ export async function POST(request: NextRequest) {
       .select('*')
       .single();
 
-    if (insertError || !perrito) {
+    if (insertError || !perritoNuevo) {
       console.error('Insert en perritos falló:', insertError);
       await limpiarRecursos(supabase, fotoPath, faceId);
       return json({ ok: false, error: 'No pudimos guardar el reporte. Intenta de nuevo.' }, 500);
     }
 
     // --- 7. Buscar coincidencias con AWS Rekognition (SearchFacesByImage, 85%) ---
+    //     El match NO toca los estados: solo registra el par y avisa por correo.
     const match = await buscarCoincidencias(supabase, input, imageBytes, perritoId);
 
     if (match) {
@@ -187,11 +196,7 @@ async function findOrCreateUsuario(
   supabase: SupabaseClient,
   input: PublicarInput,
 ): Promise<string> {
-  let query = supabase.from('usuarios').select('id');
-  if (input.email) query = query.eq('email', input.email);
-  else query = query.eq('telefono', input.telefono);
-
-  const { data: existing } = await query.maybeSingle();
+  const { data: existing } = await supabase.from('usuarios').select('id').eq('email', input.email).maybeSingle();
   if (existing) return existing.id;
 
   const { data, error } = await supabase
@@ -209,8 +214,10 @@ async function findOrCreateUsuario(
 
 /**
  * Busca coincidencias faciales ≥ 85 % con reportes ACTIVOS de rol opuesto.
- * Si encuentra una válida, registra el match en `matches_ia` y marca
- * ambos reportes como RECONCILIADO.
+ * Si encuentra una válida:
+ *   - Registra el par en `matches_ia` (ON CONFLICT DO NOTHING).
+ *   - Notifica por email a ambas partes (si el par aún no fue notificado).
+ * NUNCA cambia el estado de los reportes: solo el dueño decide.
  */
 async function buscarCoincidencias(
   supabase: SupabaseClient,
@@ -256,7 +263,7 @@ async function buscarCoincidencias(
   const perdidoId = input.rol === 'PERDIDO' ? perritoId : best.id;
   const encontradoId = input.rol === 'PERDIDO' ? best.id : perritoId;
 
-  // Registrar el match (ignora si el par ya existía: ON CONFLICT DO NOTHING)
+  // Registrar el par (ignora si ya existía: ON CONFLICT DO NOTHING)
   await supabase
     .from('matches_ia')
     .upsert(
@@ -271,8 +278,38 @@ async function buscarCoincidencias(
       },
     );
 
-  // Marcar ambos reportes como RECONCILIADO (desaparecen del feed activo)
-  await supabase.from('perritos').update({ estado: 'RECONCILIADO' }).in('id', [perritoId, best.id]);
+  // --- Notificación por email (nunca bloquea la publicación) ---
+  try {
+    const { data: par } = await supabase
+      .from('matches_ia')
+      .select('notificados')
+      .eq('perrito_perdido_id', perdidoId)
+      .eq('perrito_encontrado_id', encontradoId)
+      .maybeSingle();
+
+    if (!par?.notificados) {
+      const { data: pares } = await supabase
+        .from('perritos')
+        .select('*, usuario:usuarios(id, nombre, telefono, email)')
+        .in('id', [perdidoId, encontradoId]);
+
+      const perdido = (pares ?? []).find((p) => p.id === perdidoId) as PerritoConUsuario | undefined;
+      const encontrado = (pares ?? []).find((p) => p.id === encontradoId) as PerritoConUsuario | undefined;
+
+      if (perdido && encontrado) {
+        const emailsOk = await notificarMatch({ perdido, encontrado, porcentajeSimilitud: porcentaje });
+        if (emailsOk) {
+          await supabase
+            .from('matches_ia')
+            .update({ notificados: true })
+            .eq('perrito_perdido_id', perdidoId)
+            .eq('perrito_encontrado_id', encontradoId);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error al notificar el match por email:', error);
+  }
 
   return { perrito: best, porcentaje_similitud: porcentaje };
 }

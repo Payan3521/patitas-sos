@@ -13,7 +13,7 @@
 -- 1. Tipos ENUM
 -- ----------------------------------------------------------------------------
 create type public.rol_publicacion as enum ('BUSCA_DUEÑO', 'PERDIDO');
-create type public.estado_perrito as enum ('ACTIVO', 'RECONCILIADO');
+create type public.estado_perrito as enum ('ACTIVO', 'ENCONTRADA', 'RECONCILIADO');
 
 -- ----------------------------------------------------------------------------
 -- 2. Tabla: usuarios
@@ -35,6 +35,7 @@ create table if not exists public.perritos (
   rol_publicacion  public.rol_publicacion not null,
   nombre_temporal  text,
   descripcion      text not null,
+  departamento     text not null,
   ciudad           text not null,
   barrio_zona      text,
   foto_url         text not null,
@@ -44,7 +45,9 @@ create table if not exists public.perritos (
 );
 
 create index if not exists perritos_estado_creado_idx on public.perritos (estado, creado_en desc);
+create index if not exists perritos_estado_rol_idx   on public.perritos (estado, rol_publicacion);
 create index if not exists perritos_ciudad_idx      on public.perritos (ciudad);
+create index if not exists perritos_departamento_idx on public.perritos (departamento);
 create index if not exists perritos_rol_idx         on public.perritos (rol_publicacion);
 create index if not exists perritos_aws_face_id_idx on public.perritos (aws_face_id);
 
@@ -56,6 +59,7 @@ create table if not exists public.matches_ia (
   perrito_perdido_id    uuid not null references public.perritos (id) on delete cascade,
   perrito_encontrado_id uuid not null references public.perritos (id) on delete cascade,
   porcentaje_similitud  real not null check (porcentaje_similitud between 0 and 100),
+  notificados           boolean not null default false,
   creado_en             timestamptz not null default now(),
   unique (perrito_perdido_id, perrito_encontrado_id)
 );
@@ -72,10 +76,10 @@ alter table public.usuarios   enable row level security;
 alter table public.perritos   enable row level security;
 alter table public.matches_ia enable row level security;
 
--- Lectura pública del feed: solo reportes ACTIVOS.
+-- Lectura pública del feed: reportes ACTIVOS y marcados como ENCONTRADA.
 -- (Los datos de contacto se sirven vía API con la service role key.)
 create policy "perritos_lectura_publica" on public.perritos
-  for select using (estado = 'ACTIVO');
+  for select using (estado in ('ACTIVO', 'ENCONTRADA'));
 
 -- ----------------------------------------------------------------------------
 -- 6. Storage: bucket público "fotos-perritos"

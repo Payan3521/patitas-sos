@@ -5,7 +5,7 @@ import { PublicarForm } from '@/components/PublicarForm';
 export const metadata: Metadata = {
   title: 'Publicar reporte',
   description:
-    'Publica el reporte de tu perrito perdido o de un perrito que rescataste tras el sismo. La IA busca coincidencias al instante.',
+    'Publica el reporte de tu mascota perdida o de una mascota que encontraste. La IA busca coincidencias al instante y avisamos por correo a la otra persona.',
 };
 
 export default function PublicarPage() {
@@ -22,7 +22,7 @@ export default function PublicarPage() {
         </div>
       </main>
       <footer className="border-t border-neutral-200 bg-white py-6 text-center text-xs text-neutral-400">
-        🐾 Patitas SOS · Plataforma de ayuda humanitaria post-terremoto
+        🐾 Patitas SOS · Conectamos mascotas perdidas con sus familias en Colombia
       </footer>
     </div>
   );

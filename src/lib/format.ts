@@ -8,6 +8,14 @@ export function whatsappLink(phone: string): string {
   return `https://wa.me/${digits}`;
 }
 
+/** Formatea un teléfono colombiano: +57 300 123 4567 (o lo deja tal cual). */
+export function formatPhone(phone: string): string {
+  if (/^\+57/.test(phone) && phone.length === 13) {
+    return `+57 ${phone.slice(3, 6)} ${phone.slice(6, 9)} ${phone.slice(9)}`;
+  }
+  return phone;
+}
+
 /** Formatea una fecha ISO como texto amigable en español. */
 export function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();

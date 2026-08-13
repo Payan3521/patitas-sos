@@ -3,7 +3,9 @@
 // ============================================================
 
 export type RolPublicacion = 'PERDIDO' | 'BUSCA_DUEÑO';
-export type EstadoPerrito = 'ACTIVO' | 'RECONCILIADO';
+export type EstadoPerrito = 'ACTIVO' | 'ENCONTRADA' | 'RECONCILIADO';
+
+export type CategoriaFeed = 'todos' | 'buscadas' | 'buscan-dueno' | 'encontradas';
 
 export interface Usuario {
   id: string;
@@ -19,6 +21,7 @@ export interface Perrito {
   rol_publicacion: RolPublicacion;
   nombre_temporal: string | null;
   descripcion: string;
+  departamento: string;
   ciudad: string;
   barrio_zona: string | null;
   foto_url: string;

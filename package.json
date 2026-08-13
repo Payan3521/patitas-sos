@@ -2,7 +2,7 @@
   "name": "patitas-sos",
   "version": "1.0.0",
   "private": true,
-  "description": "Plataforma de ayuda humanitaria post-terremoto: reconecta a los perritos perdidos con sus familias usando AWS Rekognition.",
+  "description": "Plataforma colombiana que reconecta mascotas perdidas con sus familias usando IA (AWS Rekognition) y notificaciones por correo (Resend).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

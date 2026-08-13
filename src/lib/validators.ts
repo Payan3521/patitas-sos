@@ -1,6 +1,10 @@
 // ============================================================
-// 🐾 Patitas SOS — Validación de los datos del formulario
+// 🐾 PATITAS SOS — Validación de los datos del formulario
 // (se ejecuta en el servidor, dentro de /api/publicar-perrito)
+//
+// El país de la plataforma es SOLO Colombia: los teléfonos se
+// normalizan a +57XXXXXXXXXX y la ubicación usa departamento y
+// municipio de la lista DANE.
 // ============================================================
 
 import type { RolPublicacion } from './types';
@@ -9,9 +13,10 @@ export interface PublicarInput {
   rol: RolPublicacion;
   nombre: string;
   telefono: string;
-  email: string | null;
+  email: string;
   nombreTemporal: string | null;
   descripcion: string;
+  departamento: string;
   ciudad: string;
   barrioZona: string | null;
 }
@@ -28,6 +33,21 @@ function clean(value: unknown): string {
     .trim();
 }
 
+/**
+ * Normaliza un teléfono colombiano a +57XXXXXXXXXX.
+ * Acepta "3001234567", "+57 300 123 4567", "573001234567", etc.
+ * Solo se permiten móviles (10 dígitos que inician con 3).
+ */
+export function normalizarTelefonoColombia(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  let local = digits;
+  if (local.startsWith('57')) local = local.slice(2);
+  if (local.length === 11 && local.startsWith('0')) local = local.slice(1);
+
+  if (local.length !== 10 || !/^3\d{9}$/.test(local)) return null;
+  return `+57${local}`;
+}
+
 export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
   const rol = fd.get('rol');
   if (rol !== 'PERDIDO' && rol !== 'BUSCA_DUEÑO') {
@@ -39,15 +59,28 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
     return fail('Ingresa tu nombre (mínimo 2 caracteres).');
   }
 
-  const telefono = clean(fd.get('telefono'));
-  if (!/^[+\d][\d\s\-()]{6,19}$/.test(telefono)) {
-    return fail('Ingresa un teléfono válido, con código de país si es posible.');
+  const telefono = normalizarTelefonoColombia(clean(fd.get('telefono')));
+  if (!telefono) {
+    return fail('Ingresa un teléfono móvil colombiano válido (Ej: 300 123 4567).');
   }
 
   const emailRaw = clean(fd.get('email'));
-  const email = emailRaw || null;
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!emailRaw) {
+    return fail('El email es obligatorio: es donde recibirás la notificación si encontramos a tu mascota.');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 254) {
     return fail('El correo electrónico no es válido.');
+  }
+  const email = emailRaw.toLowerCase();
+
+  const departamento = clean(fd.get('departamento'));
+  if (!departamento || departamento.length > 100) {
+    return fail('Selecciona el departamento donde se vio o se perdió.');
+  }
+
+  const ciudad = clean(fd.get('ciudad'));
+  if (!ciudad || ciudad.length > 120) {
+    return fail('Selecciona el municipio donde se vio o se perdió.');
   }
 
   const nombreTemporal = clean(fd.get('nombre_temporal')) || null;
@@ -60,14 +93,9 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
     return fail('Describe a la mascota (mínimo 10 caracteres).');
   }
 
-  const ciudad = clean(fd.get('ciudad'));
-  if (!ciudad || ciudad.length > 100) {
-    return fail('Indica la ciudad donde se vio o se perdió.');
-  }
-
   const barrioZona = clean(fd.get('barrio_zona')) || null;
   if (barrioZona && barrioZona.length > 120) {
-    return fail('El barrio/zona no puede superar los 120 caracteres.');
+    return fail('La dirección/barrio no puede superar los 120 caracteres.');
   }
 
   return {
@@ -79,6 +107,7 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
       email,
       nombreTemporal,
       descripcion,
+      departamento,
       ciudad,
       barrioZona,
     },
