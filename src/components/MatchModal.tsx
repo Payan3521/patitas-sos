@@ -112,6 +112,20 @@ export function MatchModal({ matchInfo, onClose }: Props) {
             y esta coincidencia. Si confirma que es la misma mascota, ambos reportes pasarán a la
             lista de <b>Encontradas</b>.
           </p>
+
+          {matchInfo.notificacion && (
+            <div
+              className={`mt-2 rounded-xl px-4 py-3 text-xs leading-relaxed ${
+                matchInfo.notificacion.ok
+                  ? 'bg-emerald-50 text-emerald-800'
+                  : 'bg-rose-50 text-rose-800'
+              }`}
+            >
+              {matchInfo.notificacion.ok
+                ? '📧 Correos de aviso enviados a ambas partes.'
+                : `⚠️ Los correos de aviso no pudieron enviarse: ${matchInfo.notificacion.detalle} Tu reporte quedó publicado igual.`}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -32,11 +32,21 @@ export interface Perrito {
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'telefono' | 'email'> | null;
 }
 
+/** Estado del envío de los correos de aviso tras un match. */
+export interface NotificacionEstado {
+  ok: boolean;
+  enviados: number;
+  total: number;
+  detalle: string;
+}
+
 /** Reporte de la contraparte cuando la IA encuentra una coincidencia. */
 export interface MatchInfo {
   perrito: Perrito;
   usuario: Pick<Usuario, 'id' | 'nombre' | 'telefono' | 'email'>;
   porcentaje_similitud: number;
+  /** Cómo terminó el envío de los correos de aviso (dueño + rescatista). */
+  notificacion?: NotificacionEstado;
 }
 
 export interface PublicarResponse {

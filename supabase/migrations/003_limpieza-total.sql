@@ -14,6 +14,13 @@
 --          --region us-east-1 --face-ids $FACE_IDS
 --
 -- El script es AUTOCONTENIDO: borra todo y recrea el esquema actual completo.
+--
+-- ⚠️  LAS FOTOS DEL BUCKET NO SE BORRAN DESDE AQUÍ:
+--     Supabase bloquea el borrado directo de storage.objects y el ALTER de su
+--     tabla desde el SQL Editor (errores 42501). Las fotos se vacían con la
+--     Storage API (ver README → "Empezar desde cero"):
+--       DELETE /storage/v1/bucket/fotos-perritos   (borra bucket y objetos)
+--       POST   /storage/v1/bucket                  (recrearlo: id y public)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -26,10 +33,18 @@ drop table if exists public.usuarios cascade;
 drop type if exists public.rol_publicacion cascade;
 drop type if exists public.estado_perrito cascade;
 
--- Vaciar las fotos del bucket público (los reportes viejos quedaron huérfanos).
-delete from storage.objects where bucket_id = 'fotos-perritos';
+-- Las fotos del bucket público NO se vacían desde SQL (Supabase lo bloquea
+-- con el trigger protect_delete y el ALTER de storage.objects no está
+-- permitido para el rol del SQL Editor). Vacíalas con la Storage API:
+--   DELETE /storage/v1/bucket/fotos-perritos  →  POST /storage/v1/bucket
+-- (misma config: id "fotos-perritos", public true). Ver README.
 
-drop policy if exists "perritos_lectura_publica" on public.perritos;
+-- OJO: NO hacer `drop policy` sobre public.perritos AQUÍ. El SQL Editor corre
+-- el script en una sola transacción: las drop table de arriba ya borraron la
+-- tabla (y sus policies RLS via cascade), y `drop policy if exists ... on
+-- public.perritos` fallaría con 42P01 porque la tabla ya no existe en la txn.
+-- La tabla storage.objects nunca se borra, así que su policy sí se puede
+-- dropear/recrear con seguridad.
 drop policy if exists "fotos_perritos_lectura_publica" on storage.objects;
 
 -- ----------------------------------------------------------------------------

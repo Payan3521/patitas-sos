@@ -33,7 +33,7 @@ import {
 } from '@/lib/rekognition';
 import { notificarMatch } from '@/lib/mail';
 import { createServerSupabase } from '@/lib/supabase-server';
-import type { Perrito } from '@/lib/types';
+import type { NotificacionEstado, Perrito } from '@/lib/types';
 import { validatePublicarInput, type PublicarInput } from '@/lib/validators';
 
 export const runtime = 'nodejs';
@@ -41,6 +41,12 @@ export const dynamic = 'force-dynamic';
 
 type PerritoConUsuario = Perrito & {
   usuario?: { id: string; nombre: string; telefono: string; email: string | null } | null;
+};
+
+type ResultadoMatch = {
+  perrito: PerritoConUsuario;
+  porcentaje_similitud: number;
+  notificacion: NotificacionEstado;
 };
 
 const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
@@ -169,6 +175,7 @@ export async function POST(request: NextRequest) {
           usuario:
             match.perrito.usuario ?? { id: '', nombre: '', telefono: '', email: null },
           porcentaje_similitud: match.porcentaje_similitud,
+          notificacion: match.notificacion,
         },
       });
     }
@@ -224,7 +231,7 @@ async function buscarCoincidencias(
   input: PublicarInput,
   imageBytes: Buffer,
   perritoId: string,
-): Promise<{ perrito: PerritoConUsuario; porcentaje_similitud: number } | null> {
+): Promise<ResultadoMatch | null> {
   let faceMatches: FaceMatch[] = [];
   try {
     faceMatches = await searchFacesByImage(imageBytes, FACE_MATCH_THRESHOLD);
@@ -279,6 +286,12 @@ async function buscarCoincidencias(
     );
 
   // --- Notificación por email (nunca bloquea la publicación) ---
+  let resultadoNotificacion: NotificacionEstado = {
+    ok: false,
+    enviados: 0,
+    total: 2,
+    detalle: 'Los correos ya habían sido notificados para este par.',
+  };
   try {
     const { data: par } = await supabase
       .from('matches_ia')
@@ -297,13 +310,15 @@ async function buscarCoincidencias(
       const encontrado = (pares ?? []).find((p) => p.id === encontradoId) as PerritoConUsuario | undefined;
 
       if (perdido && encontrado) {
-        const emailsOk = await notificarMatch({ perdido, encontrado, porcentajeSimilitud: porcentaje });
-        if (emailsOk) {
+        resultadoNotificacion = await notificarMatch({ perdido, encontrado, porcentajeSimilitud: porcentaje });
+        if (resultadoNotificacion.ok) {
           await supabase
             .from('matches_ia')
             .update({ notificados: true })
             .eq('perrito_perdido_id', perdidoId)
             .eq('perrito_encontrado_id', encontradoId);
+        } else {
+          console.warn('Notificación de match falló:', resultadoNotificacion.detalle);
         }
       }
     }
@@ -311,7 +326,7 @@ async function buscarCoincidencias(
     console.error('Error al notificar el match por email:', error);
   }
 
-  return { perrito: best, porcentaje_similitud: porcentaje };
+  return { perrito: best, porcentaje_similitud: porcentaje, notificacion: resultadoNotificacion };
 }
 
 /** Limpieza cuando el reporte no se pudo guardar. */

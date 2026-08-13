@@ -134,16 +134,33 @@ que agrega:
 
 ### Empezar desde cero (limpieza total)
 
-Para **borrar todos los datos y volver a probar desde cero** (reportes, matches,
-fotos del bucket y esquema viejo), ejecuta en el SQL Editor:
+Para **borrar todos los datos y volver a probar desde cero** (reportes, matches
+y esquema viejo), ejecuta en el SQL Editor:
 
 ```
 supabase/migrations/003_limpieza-total.sql
 ```
 
-El script es **autocontenido**: elimina tablas/enums/políticas, vacía el bucket
-`fotos-perritos` y recrea el esquema completo actual. Al final muestra la
-verificación (0 filas en las 3 tablas + el enum con 3 valores).
+El script es **autocontenido** para la base: elimina tablas/enums/políticas y
+recrea el esquema completo actual. Al final muestra la verificación (0 filas en
+las 3 tablas + el enum con 3 valores).
+
+> ℹ️ **Las fotos del bucket NO se borran desde SQL**: Supabase bloquea el borrado
+> directo de `storage.objects` y el `ALTER` de su tabla desde el SQL Editor
+> (errores 42501). El bucket `fotos-perritos` se vacía con la **Storage API**
+> (borrar y recrear deja la misma configuración: público, 5 MB, jpeg/png/webp):
+>
+> ```bash
+> curl -X DELETE -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+>   https://TU_PROYECTO.supabase.co/storage/v1/bucket/fotos-perritos
+> curl -X POST -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+>   -H "Content-Type: application/json" \
+>   -d '{"id":"fotos-perritos","name":"fotos-perritos","public":true}' \
+>   https://TU_PROYECTO.supabase.co/storage/v1/bucket
+> ```
+>
+> Si el bucket tiene objetos, bórralos primero con
+> `DELETE /storage/v1/object/fotos-perritos/<ruta>` (uno por uno).
 
 La **colección de caras de AWS no se toca desde SQL**; vacíala con la CLI:
 
@@ -216,9 +233,16 @@ Los correos de coincidencia se envían con la API HTTP de [Resend](https://resen
    porque los enlaces de los correos apuntan a `/perrito/[id]`.
 6. Define `APP_TOKEN_SECRET` con un secreto largo: `openssl rand -hex 32`.
 
-> **Modo pruebas**: con el remitente por defecto `onboarding@resend.dev` (cuando no
-> defines `EMAIL_FROM`) solo puedes enviarte correos a ti mismo desde la cuenta de Resend.
-> Para correos reales a cualquier destinatario necesitas un dominio verificado.
+> **Modo pruebas (desarrollo, sin dominio)**: define `EMAIL_FROM="Patitas SOS <onboarding@resend.dev>"`
+> y los correos **solo llegan al email con el que creaste tu cuenta de Resend** (entrega a
+> cualquier otro destinatario falla). Para probar el flujo completo de coincidencia, usa ese
+> mismo email en ambos reportes (perdido y encontrado): recibirás los 2 correos.
+> Para correos reales a cualquier destinatario necesitas un dominio verificado
+> (`Patitas SOS <no-reply@tudominio.co>`).
+>
+> 💡 Si un match no notifica, la publicación **no se bloquea** (diseño): el estado del envío se
+> devuelve en `matchInfo.notificacion` de la respuesta del API y se muestra en el modal de
+> coincidencia (`notificados=true` en `matches_ia` solo cuando Resend aceptó ambos correos).
 
 ---
 

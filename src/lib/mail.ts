@@ -10,7 +10,7 @@
 // ============================================================
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Perrito } from './types';
+import type { NotificacionEstado, Perrito } from './types';
 
 const MAIL_HEADER_STYLE =
   'background:linear-gradient(135deg,#f59e0b,#f97316,#f43f5e);padding:28px 32px;text-align:center;color:#fff';
@@ -55,32 +55,50 @@ export function verificarTokenEncontrada(perritoId: string, token: string): bool
 // Envío vía Resend API
 // ----------------------------------------------------------------------------
 
-async function enviarEmail(to: string, subject: string, html: string): Promise<boolean> {
+interface EnvioResultado {
+  ok: boolean;
+  mensaje: string;
+}
+
+function mensajeErrorResend(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { message?: string; name?: string };
+    return parsed.message || `Resend respondió ${status}`;
+  } catch {
+    return `Resend respondió ${status}: ${body.slice(0, 120)}`;
+  }
+}
+
+async function enviarEmail(to: string, subject: string, html: string): Promise<EnvioResultado> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn('FALTA RESEND_API_KEY: no se envió el correo a', to);
-    return false;
+    return { ok: false, mensaje: 'Falta la variable RESEND_API_KEY en el servidor.' };
   }
 
-  const from =
-    process.env.EMAIL_FROM ??
-    'Patitas SOS <onboarding@resend.dev>';
+  const from = process.env.EMAIL_FROM ?? 'Patitas SOS <onboarding@resend.dev>';
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from, to, subject, html }),
-  });
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to, subject, html }),
+    });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    console.error('Resend respondió', res.status, body.slice(0, 300));
-    return false;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      const mensaje = mensajeErrorResend(res.status, body);
+      console.error('Resend respondió', res.status, body.slice(0, 300));
+      return { ok: false, mensaje };
+    }
+    return { ok: true, mensaje: `Correo enviado a ${to}` };
+  } catch (error) {
+    console.error('Error de red con Resend:', error);
+    return { ok: false, mensaje: 'Error de red al contactar a Resend.' };
   }
-  return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -156,13 +174,21 @@ export interface MatchParaNotificar {
  *  - Al dueño: alguien posiblemente encontró a su mascota (con enlace para
  *    verla y para marcarla como encontrada).
  *  - Al rescatista: un posible dueño apareció.
- * @returns true si AMBOS correos salieron bien.
+ * El resultado nunca debe bloquear la publicación: devuelve detalles del
+ * envío por si la UI quiere mostrarlos.
  */
-export async function notificarMatch({ perdido, encontrado, porcentajeSimilitud }: MatchParaNotificar): Promise<boolean> {
+export async function notificarMatch({ perdido, encontrado, porcentajeSimilitud }: MatchParaNotificar): Promise<NotificacionEstado> {
   const emailDueño = perdido.usuario?.email ?? null;
   const emailRescatista = encontrado.usuario?.email ?? null;
 
-  if (!emailDueño || !emailRescatista) return false;
+  if (!emailDueño || !emailRescatista) {
+    return {
+      ok: false,
+      enviados: 0,
+      total: 2,
+      detalle: 'Faltan los correos de una de las partes para notificar.',
+    };
+  }
 
   const nombrePerdido = perdido.nombre_temporal || 'mi mascota';
   const nombreEncontrado = encontrado.nombre_temporal || 'un perrito rescatado';
@@ -237,5 +263,18 @@ export async function notificarMatch({ perdido, encontrado, porcentajeSimilitud 
     enviarEmail(emailRescatista, `🐾 ¡Un posible dueño apareció para ${escapar(nombreEncontrado)}!`, htmlRescatista),
   ]);
 
-  return dueñoOk && rescatistaOk;
+  const fallos = [dueñoOk, rescatistaOk].filter((r) => !r.ok).map((r) => r.mensaje);
+  const enviados = dueñoOk.ok && rescatistaOk.ok ? 2 : dueñoOk.ok || rescatistaOk.ok ? 1 : 0;
+
+  return {
+    ok: enviados === 2,
+    enviados,
+    total: 2,
+    detalle:
+      enviados === 2
+        ? 'Correos de aviso enviados a ambas partes.'
+        : enviados === 1
+          ? `Solo se envió un correo: ${fallos.join(' | ')}`
+          : `No se pudo enviar: ${fallos.join(' | ')}`,
+  };
 }
