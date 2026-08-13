@@ -28,27 +28,56 @@ desplegar en minutos con Docker.
 ## 📁 Estructura del proyecto
 
 ```
-├── Dockerfile                     # Multi-stage, salida standalone
-├── docker-compose.yml             # Expone la app en :3000 y mapea las variables
+├── Dockerfile                     # Multi-stage: compila y genera salida standalone
+├── docker-compose.yml             # Expone la app en :3000 e inyecta las variables
+├── .dockerignore                  # Excluye .env.local y node_modules de la imagen
+├── package.json                   # Next.js 15, React 19, @supabase/supabase-js, SDK AWS v3
+├── next.config.mjs                # Configuración de Next.js
+├── tsconfig.json                  # TypeScript
+├── postcss.config.mjs             # Tailwind CSS 4
+├── .env.local.example             # Plantilla de variables (nunca se sube .env.local)
+├── public/
+│   └── robots.txt
 ├── aws/
 │   └── migrations/
-│       └── aws-iam-policy.json    # Política IAM mínima de AWS (con ARN específico)
+│       └── aws-iam-policy.json    # Política IAM mínima para Rekognition (acción por acción)
 ├── supabase/
-│   ├── schema.sql                 # Script SQL completo (bases nuevas)
-│   ├── migrations/                # Migraciones para bases ya existentes
-│   └── aws-iam-policy.json        # (movido a aws/migrations/aws-iam-policy.json)
+│   ├── schema.sql                 # Script SQL completo → para bases NUEVAS
+│   └── migrations/
+│       ├── 002_mejoras-colombia.sql    # Migra bases viejas: ENCONTRADA, departamento, notificados
+│       └── 003_limpieza-total.sql      # RESET total: borra todo y recrea el esquema
 └── src/
     ├── app/
+    │   ├── layout.tsx             # Layout raíz (metadatos, HTML base)
+    │   ├── globals.css            # Estilos globales (Tailwind)
     │   ├── page.tsx               # Home / Feed (categorías + scroll infinito + filtros)
-    │   ├── publicar/page.tsx      # Formulario de registro (Dueño / Rescatista)
-    │   ├── perrito/[id]/page.tsx  # Detalle del reporte + "marcar como encontrada"
+    │   ├── publicar/
+    │   │   └── page.tsx           # Formulario de registro (Dueño / Rescatista)
+    │   ├── perrito/
+    │   │   └── [id]/page.tsx      # Detalle (server component) + "marcar como encontrada"
     │   └── api/
     │       ├── publicar-perrito/route.ts          # POST: flujo completo + matching IA
-    │       ├── perritos/route.ts                  # GET: feed con paginación y filtros
+    │       ├── perritos/route.ts                  # GET: feed paginado y filtrado
     │       ├── perritos/[id]/route.ts             # GET: detalle de un reporte
-    │       └── perritos/[id]/marcar-encontrada/   # POST: validar y marcar ENCONTRADA
-    ├── components/                # Header, PetCard, FilterBar, PublicarForm, MatchModal…
-    └── lib/                       # Supabase, Rekognition, mail (Resend), colombia, validators…
+    │       └── perritos/[id]/marcar-encontrada/   # POST: validar identidad y marcar ENCONTRADA
+    ├── components/
+    │   ├── Header.tsx             # Encabezado sticky con CTA de publicación
+    │   ├── PetCard.tsx            # Tarjeta del feed (imagen, categoría, WhatsApp)
+    │   ├── FilterBar.tsx          # Filtros por categoría, departamento → municipio y barrio
+    │   ├── PublicarForm.tsx       # Formulario con pestañas + compresión de foto en canvas
+    │   ├── MatchModal.tsx         # Modal gigante que "congela" la pantalla al detectar match
+    │   └── PerritoDetalle.tsx     # Contenido del detalle (contacto, WhatsApp, marcar encontrada)
+    └── lib/
+        ├── supabase-client.ts     # Cliente anon key (navegador) — hoy toda la app usa el API
+        ├── supabase-server.ts     # Cliente service role key — SOLO API Routes / Server Components
+        ├── rekognition.ts         # AWS Rekognition SDK v3 (IndexFaces / SearchFacesByImage / DeleteFaces)
+        ├── mail.ts                # Resend vía fetch + firma HMAC del enlace "marcar encontrada"
+        ├── colombia.ts            # 33 departamentos y 1122 municipios (datos DANE, sin red)
+        ├── validators.ts          # Validación del formulario y normalización +57 del teléfono
+        ├── constants.ts           # Límites de negocio (200 KB, umbral 85 %, nombre del bucket…)
+        ├── format.ts              # Formato: tiempo relativo, enlaces de WhatsApp
+        ├── image-utils.ts         # Compresión con <canvas> hasta ≤ 200 KB
+        └── types.ts               # Tipos compartidos (Perrito, Usuario, Match, CategoriaFeed…)
 ```
 
 ---
@@ -103,14 +132,36 @@ que agrega:
 > Las escrituras se hacen siempre desde el servidor con la `service role key` (salta la RLS).
 > La RLS solo blinda el acceso directo y permite leer el feed de reportes ACTIVOS y ENCONTRADA.
 
+### Empezar desde cero (limpieza total)
+
+Para **borrar todos los datos y volver a probar desde cero** (reportes, matches,
+fotos del bucket y esquema viejo), ejecuta en el SQL Editor:
+
+```
+supabase/migrations/003_limpieza-total.sql
+```
+
+El script es **autocontenido**: elimina tablas/enums/políticas, vacía el bucket
+`fotos-perritos` y recrea el esquema completo actual. Al final muestra la
+verificación (0 filas en las 3 tablas + el enum con 3 valores).
+
+La **colección de caras de AWS no se toca desde SQL**; vacíala con la CLI:
+
+```bash
+# Vaciar las caras de la colección (no borra la colección):
+aws rekognition list-faces --collection-id perritos --max-results 100 --query "Faces[].FaceId" --output text \
+  | xargs -r aws rekognition delete-faces --collection-id perritos --face-ids
+```
+
 ---
 
 ## 🤖 2. Configurar AWS Rekognition
 
 1. Crea un usuario IAM con acceso programático y adjunta la política
    [`aws/migrations/aws-iam-policy.json`](aws/migrations/aws-iam-policy.json)
-   (acción: `IndexFaces`, `SearchFacesByImage`, `DeleteFaces`, `ListFaces`,
-   `CreateCollection`, `ListCollections`; el ARN está fijado a tu región y cuenta).
+   (acciones: `CreateCollection`, `ListCollections`, `IndexFaces`,
+   `SearchFacesByImage`, `DeleteFaces`, `ListFaces`; el ARN está fijado a tu
+   región y cuenta).
 2. Crea la colección de caras (una sola vez) con la CLI de AWS:
 
    ```bash
@@ -118,6 +169,12 @@ que agrega:
    ```
 
 3. Anota `AWS_REKOGNITION_COLLECTION_ID=perritos` en tu `.env.local`.
+
+> ⚠️ La política **no incluye `DeleteCollection`** (ni lo necesita): borrar la
+> colección completa daría `AccessDeniedException`. Para dejar la colección vacía
+> usa `ListFaces` + `DeleteFaces` (como en la sección de *limpieza total*). Si
+> prefieres poder borrarla y recrearla, agrega `rekognition:DeleteCollection` a
+> la política IAM.
 
 ---
 
@@ -271,4 +328,5 @@ Flujo unificado para Dueño (`PERDIDO`) y Rescatista (`BUSCA_DUEÑO`):
 | Sin matches al publicar | El umbral es 85%: sube fotos de la misma cara con buena resolución |
 | No llegan los correos de coincidencia | Falta `RESEND_API_KEY` o el dominio de `EMAIL_FROM` no está verificado en Resend |
 | "No pudimos verificar que eres quien publicó" | La identidad debe coincidir con teléfono/email del reporte; o usa el enlace `?token=` del correo |
+| `AccessDeniedException` al borrar la colección | La política IAM no incluye `DeleteCollection`; vacía las caras con `ListFaces` + `DeleteFaces` (ver *limpieza total*) o agrega el permiso |
 | Los enlaces del correo apuntan a localhost | Define `APP_URL` con la URL pública real |
