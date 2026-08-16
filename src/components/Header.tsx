@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 
@@ -13,7 +12,6 @@ import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
  */
 export function Header() {
   const { session, email, loading, signOut } = useAuth();
-  const router = useRouter();
   const [noLeidas, setNoLeidas] = useState(0);
   const [chatNoLeidas, setChatNoLeidas] = useState(0);
   const [misAvisosNoLeidas, setMisAvisosNoLeidas] = useState(0);
@@ -59,7 +57,10 @@ export function Header() {
 
   async function cerrarSesion() {
     await signOut();
-    router.push('/');
+    // Navegación dura: tras borrar la cookie, una carga completa evita que el
+    // guard de sesión de la página actual (router.replace('/iniciar-sesion'))
+    // gane la carrera contra router.push y deje al usuario en el login.
+    window.location.assign('/');
   }
 
   return (

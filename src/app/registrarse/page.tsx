@@ -25,7 +25,7 @@ export default function RegistrarsePage() {
   const [info, setInfo] = useState('');
 
   useEffect(() => {
-    if (!loading && session) router.replace('/mis-publicaciones');
+    if (!loading && session) router.replace('/');
   }, [loading, session, router]);
 
   async function registrarse(event: FormEvent<HTMLFormElement>) {
@@ -70,7 +70,7 @@ export default function RegistrarsePage() {
         throw new Error(data.error ?? 'No pudimos crear tu cuenta.');
       }
       setInfo('¡Cuenta lista! Ya iniciaste sesión. 🔓');
-      setTimeout(() => router.replace('/mis-publicaciones'), 800);
+      setTimeout(() => router.replace('/'), 800);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos crear tu cuenta. Intenta de nuevo.');
     } finally {

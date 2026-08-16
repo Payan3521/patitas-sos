@@ -26,7 +26,7 @@ export default function IniciarSesionPage() {
   const [info, setInfo] = useState('');
 
   useEffect(() => {
-    if (!loading && session) router.replace('/mis-publicaciones');
+    if (!loading && session) router.replace('/');
   }, [loading, session, router]);
 
   async function entrar(event: FormEvent<HTMLFormElement>) {
@@ -45,7 +45,7 @@ export default function IniciarSesionPage() {
     try {
       const { error: err } = await login(email.trim().toLowerCase(), password);
       if (err) throw new Error(err);
-      router.replace('/mis-publicaciones');
+      router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos iniciar sesión. Intenta de nuevo.');
     } finally {
