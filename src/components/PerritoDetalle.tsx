@@ -13,6 +13,10 @@ interface Props {
   perrito: Perrito;
   token?: string;
   matches?: MatchedPublication[];
+  /** El visitante logueado es quien publicó este reporte. */
+  esPublicador?: boolean;
+  /** El visitante puede ver el contacto de este reporte (match + autorización). */
+  puedeVerContacto?: boolean;
 }
 
 /**
@@ -27,7 +31,7 @@ interface Props {
  * Si además hay match de la IA, solo las partes logueadas ven la
  * referencia a la publicación de la contraparte.
  */
-export function PerritoDetalle({ perrito, token, matches = [] }: Props) {
+export function PerritoDetalle({ perrito, token, matches = [], esPublicador = false, puedeVerContacto = false }: Props) {
   const router = useRouter();
   const { session } = useAuth();
   const [verificando, setVerificando] = useState(false);
@@ -44,6 +48,12 @@ export function PerritoDetalle({ perrito, token, matches = [] }: Props) {
 
   const sesionEmail = (session?.email ?? '').toLowerCase();
   const esParte = !!sesionEmail && sesionEmail === (usuario.email ?? '').toLowerCase();
+
+  /** ¿El visitante (publicador) ya autorizó compartir su contacto en este match? */
+  const autorizoMiLado = (match: MatchedPublication): boolean => {
+    if (perrito.rol_publicacion === 'PERDIDO') return match.autorizacion?.dueno_autorizo ?? false;
+    return match.autorizacion?.encontrador_autorizo ?? false;
+  };
 
   const badge = esEncontrada
     ? { text: '✅ ENCONTRADA', className: 'bg-emerald-600 text-white' }
@@ -104,33 +114,50 @@ export function PerritoDetalle({ perrito, token, matches = [] }: Props) {
               const nombreContra =
                 contra.nombre_temporal ||
                 textosEspecie(contra.especie)[contra.rol_publicacion === 'PERDIDO' ? 'perdido' : 'rescatado'];
+              const yaAutorice = autorizoMiLado(match);
               return (
-                <Link
-                  key={contra.id}
-                  href={`/perrito/${contra.id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-white p-3 transition hover:bg-amber-100"
-                >
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-neutral-200">
-                    <Image
-                      src={contra.foto_url}
-                      alt={nombreContra}
-                      fill
-                      sizes="56px"
-                      className="object-cover"
-                      unoptimized
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-extrabold text-neutral-900">{nombreContra}</p>
-                    <p className="text-xs text-neutral-500">
-                      {contra.departamento} · {contra.ciudad}
-                    </p>
-                    <p className="text-xs font-bold text-amber-700">
-                      Similaridad: {match.porcentaje_similitud.toFixed(1)}%
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs font-bold text-amber-600">Ver →</span>
-                </Link>
+                <div key={contra.id} className="space-y-1">
+                  <Link
+                    href={`/perrito/${contra.id}`}
+                    className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-white p-3 transition hover:bg-amber-100"
+                  >
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-neutral-200">
+                      <Image
+                        src={contra.foto_url}
+                        alt={nombreContra}
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-extrabold text-neutral-900">{nombreContra}</p>
+                      <p className="text-xs text-neutral-500">
+                        {contra.departamento} · {contra.ciudad}
+                      </p>
+                      <p className="text-xs font-bold text-amber-700">
+                        Similaridad: {match.porcentaje_similitud.toFixed(1)}%
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-bold text-amber-600">Ver →</span>
+                  </Link>
+
+                  {esPublicador && (
+                    yaAutorice ? (
+                      <p className="px-1 text-xs font-semibold text-emerald-700">
+                        ✅ Ya compartiste tu contacto con esta persona (lo recibirá por correo).
+                      </p>
+                    ) : (
+                      <Link
+                        href={`/compartir-contacto?match=${match.match_id}&rol=${perrito.rol_publicacion}`}
+                        className="block rounded-xl bg-amber-600 px-3 py-2 text-center text-sm font-black text-white transition hover:bg-amber-700"
+                      >
+                        🔓 Compartir mi contacto con esta persona
+                      </Link>
+                    )
+                  )}
+                </div>
               );
             })}
           </div>
@@ -165,39 +192,66 @@ export function PerritoDetalle({ perrito, token, matches = [] }: Props) {
         <p className="mt-4 whitespace-pre-line text-neutral-700">{perrito.descripcion}</p>
       </div>
 
-      {/* Contacto */}
-      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-        <p className="text-[11px] font-black uppercase tracking-wide text-amber-700">
-          Datos de {esPerdido ? 'quien busca a la mascota' : 'quien la rescató'}
-        </p>
-        <p className="mt-1 text-lg font-extrabold text-neutral-900">{usuario.nombre}</p>
-        <p className="text-sm text-neutral-700">📞 {formatPhone(telefono)}</p>
-        {usuario.email && <p className="truncate text-sm text-neutral-700">✉️ {usuario.email}</p>}
+      {/* Contacto — 🔒 SOLO con match + autorización (o siendo el publicador) */}
+      {puedeVerContacto && usuario?.nombre ? (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-wide text-amber-700">
+            Datos de {esPerdido ? 'quien busca a la mascota' : 'quien la rescató'}
+          </p>
+          <p className="mt-1 text-lg font-extrabold text-neutral-900">{usuario.nombre}</p>
+          <p className="text-sm text-neutral-700">📞 {formatPhone(telefono)}</p>
+          {usuario.email && <p className="truncate text-sm text-neutral-700">✉️ {usuario.email}</p>}
 
-        <div className="mt-4 space-y-2">
-          {telefono && (
-            <a
-              href={whatsappLink(telefono)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 text-base font-extrabold text-white shadow transition hover:bg-[#1fb958]"
-            >
-              💬 Escribir por WhatsApp
-            </a>
-          )}
-          {telefono && (
-            <a
-              href={`tel:${telefono.replace(/\D/g, '')}`}
-              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-300 bg-white px-5 py-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              📞 Llamar por teléfono
-            </a>
+          <div className="mt-4 space-y-2">
+            {telefono && (
+              <a
+                href={whatsappLink(telefono)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 text-base font-extrabold text-white shadow transition hover:bg-[#1fb958]"
+              >
+                💬 Escribir por WhatsApp
+              </a>
+            )}
+            {telefono && (
+              <a
+                href={`tel:${telefono.replace(/\D/g, '')}`}
+                className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-300 bg-white px-5 py-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-50"
+              >
+                📞 Llamar por teléfono
+              </a>
+            )}
+          </div>
+          <p className="mt-3 text-[11px] text-neutral-500">
+            {esPublicador
+              ? '🤐 Estos son los datos de TU cuenta. Solo tú los ves aquí: ninguna otra persona los verá sin que autorices compartirlos en una coincidencia.'
+              : '🔓 Estos datos se mostraron porque la persona autorizó compartirlos con una contraparte.'}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-wide text-neutral-500">
+            🔒 Datos de contacto protegidos
+          </p>
+          {esPublicador ? (
+            <p className="mt-1 text-sm text-neutral-600">
+              Tu información personal (teléfono, correo, dirección) <b>no se muestra</b> en esta
+              publicación. Tú decides compartirla con alguien solamente cuando hay una coincidencia:
+              usa el botón <b>«Compartir mi contacto»</b> que aparece junto a cada coincidencia o el
+              enlace del correo que llega.
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-neutral-600">
+              Por privacidad, los datos de contacto de quien publica <b>solo se comparten</b> cuando
+              hay una coincidencia real y esa persona lo autoriza expresamente. Si tú eres parte de una
+              coincidencia, recibirás un correo con el botón «Compartir mi información de contacto».
+            </p>
           )}
         </div>
-      </div>
+      )}
 
       {/* Marcar como encontrada — SOLO el dueño: sesión iniciada o token del correo */}
-      {!esEncontrada && !exito && esPerdido && (esParte || token) && (
+      {!esEncontrada && !exito && esPerdido && (esPublicador || token) && (
         <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-black uppercase tracking-wide text-neutral-500">
             ¿Es tu mascota? Márcala como encontrada

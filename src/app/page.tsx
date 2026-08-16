@@ -168,7 +168,10 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-neutral-200 bg-white py-6 text-center text-xs text-neutral-400">
-        🐾 Patitas SOS · Conectamos mascotas perdidas con sus familias en Colombia · Hecho con 💛
+        🐾 Patitas SOS · Conectamos mascotas perdidas con sus familias en Colombia · Hecho con 💛 ·{' '}
+        <a href="/politica-de-privacidad" className="underline">
+          Política de Privacidad
+        </a>
       </footer>
     </div>
   );

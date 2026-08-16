@@ -42,6 +42,7 @@ create table if not exists public.perritos (
   foto_url         text not null,
   aws_face_id      varchar(128) unique,  -- DEPRECADA (era AWS Rekognition); se conserva por datos viejos
   estado           public.estado_perrito not null default 'ACTIVO',
+  avisos_habilitados boolean not null default true,  -- 👀 el dueño puede desactivar los avisos (botón 🔕)
   creado_en        timestamptz not null default now()
 );
 
@@ -62,6 +63,8 @@ create table if not exists public.matches_ia (
   porcentaje_similitud  real not null check (porcentaje_similitud between 0 and 100),
   notificados           boolean not null default false,
   razon                 text,
+  dueno_autorizo        boolean not null default false,
+  encontrador_autorizo  boolean not null default false,
   creado_en             timestamptz not null default now(),
   unique (perrito_perdido_id, perrito_encontrado_id)
 );
@@ -90,6 +93,85 @@ create index if not exists comparaciones_a_idx on public.comparaciones (perrito_
 create index if not exists comparaciones_b_idx on public.comparaciones (perrito_b_id);
 
 -- ----------------------------------------------------------------------------
+-- 4.2 Tabla: consentimientos  (auditoría de autorizaciones de contacto)
+--     Cada parte de un match autoriza por separado compartir SUS datos.
+-- ----------------------------------------------------------------------------
+create table if not exists public.consentimientos (
+  id              uuid primary key default gen_random_uuid(),
+  match_id        uuid not null references public.matches_ia (id) on delete cascade,
+  usuario_id      uuid not null references public.usuarios (id) on delete cascade,
+  lado            text not null check (lado in ('dueno', 'encontrador')),
+  tipo            text not null default 'compartir_contacto',
+  texto_aceptado  text,
+  creado_en       timestamptz not null default now(),
+  unique (match_id, usuario_id, lado, tipo)
+);
+
+create index if not exists consentimientos_match_idx on public.consentimientos (match_id);
+create index if not exists consentimientos_usuario_idx on public.consentimientos (usuario_id);
+
+-- ----------------------------------------------------------------------------
+-- 4.3 Tabla: conversaciones  (💬 chat privado entre las partes de un match)
+--     Una conversación por match; los mensajes viven en `mensajes`.
+-- ----------------------------------------------------------------------------
+create table if not exists public.conversaciones (
+  id         uuid primary key default gen_random_uuid(),
+  match_id   uuid not null references public.matches_ia (id) on delete cascade,
+  creado_en  timestamptz not null default now(),
+  unique (match_id)
+);
+
+-- ----------------------------------------------------------------------------
+-- 4.4 Tabla: mensajes
+-- ----------------------------------------------------------------------------
+create table if not exists public.mensajes (
+  id              uuid primary key default gen_random_uuid(),
+  conversacion_id uuid not null references public.conversaciones (id) on delete cascade,
+  usuario_id      uuid not null references public.usuarios (id) on delete cascade,
+  contenido       text not null check (char_length(contenido) between 1 and 2000),
+  leida           boolean not null default false,
+  creado_en       timestamptz not null default now()
+);
+
+create index if not exists mensajes_conversacion_idx on public.mensajes (conversacion_id, creado_en);
+create index if not exists mensajes_usuario_idx on public.mensajes (usuario_id);
+
+-- ----------------------------------------------------------------------------
+-- 4.5 Tabla: avistamientos  (👀 "Vi esta mascota": hilo testigo ↔ dueño)
+--     El testigo es un USUARIO de la app (cuenta obligatoria; nada de
+--     cookies/HMAC). El mensaje inicial vive en `mensajes_aviso` (primera fila).
+-- ----------------------------------------------------------------------------
+create table if not exists public.avistamientos (
+  id             uuid primary key default gen_random_uuid(),
+  perrito_id     uuid not null references public.perritos (id) on delete cascade,
+  usuario_id     uuid not null references public.usuarios (id) on delete cascade,  -- el testigo
+  creado_en      timestamptz not null default now()
+);
+
+create index if not exists avistamientos_perrito_idx  on public.avistamientos (perrito_id, creado_en desc);
+create index if not exists avistamientos_usuario_idx on public.avistamientos (usuario_id, creado_en desc);
+-- Dedupe: un aviso por (publicación + testigo) → reutiliza el hilo.
+create unique index if not exists avistamientos_perrito_usuario_idx
+  on public.avistamientos (perrito_id, usuario_id);
+
+-- ----------------------------------------------------------------------------
+-- 4.6 Tabla: mensajes_aviso  (mensajes del hilo de aviso)
+--     leida          = leída por el DUEÑO   (autor='avisador' pendiente)
+--     leida_avisador = leída por el TESTIGO (autor='dueño' pendiente)
+-- ----------------------------------------------------------------------------
+create table if not exists public.mensajes_aviso (
+  id              uuid primary key default gen_random_uuid(),
+  avistamiento_id uuid not null references public.avistamientos (id) on delete cascade,
+  autor           text not null check (autor in ('dueño', 'avisador')),
+  contenido       text not null check (char_length(contenido) between 1 and 2000),
+  leida           boolean not null default false,
+  leida_avisador  boolean not null default false,
+  creado_en       timestamptz not null default now()
+);
+
+create index if not exists mensajes_aviso_avistamiento_idx on public.mensajes_aviso (avistamiento_id, creado_en);
+
+-- ----------------------------------------------------------------------------
 -- 5. Row Level Security (RLS)
 --    La app escribe SIEMPRE desde las API Routes usando la service role key
 --    (que salta la RLS). Estas políticas solo blindan el acceso directo.
@@ -98,6 +180,11 @@ alter table public.usuarios   enable row level security;
 alter table public.perritos   enable row level security;
 alter table public.matches_ia enable row level security;
 alter table public.comparaciones enable row level security;
+alter table public.consentimientos enable row level security;
+alter table public.conversaciones enable row level security;
+alter table public.mensajes enable row level security;
+alter table public.avistamientos enable row level security;
+alter table public.mensajes_aviso enable row level security;
 
 -- Lectura pública del feed: reportes ACTIVOS y marcados como ENCONTRADA.
 -- (Los datos de contacto se sirven vía API con la service role key.)

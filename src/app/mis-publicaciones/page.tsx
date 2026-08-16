@@ -3,9 +3,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 import { Header } from '@/components/Header';
+import { chatHabilitadoPara } from '@/lib/chat';
 import { timeAgo } from '@/lib/format';
 import { textosEspecie } from '@/lib/especie';
 import type { MisPublicacionesResponse, PerritoConMatches } from '@/lib/types';
@@ -21,6 +22,28 @@ export default function MisPublicacionesPage() {
 
   const [perritos, setPerritos] = useState<PerritoConMatches[] | null>(null);
   const [error, setError] = useState('');
+
+  /** Activa/desactiva los avisos "👀 Vi esta mascota" de una publicación. */
+  const alternarAvisos = useCallback(
+    async (perrito: PerritoConMatches, habilitados: boolean) => {
+      setPerritos((prev) =>
+        prev?.map((p) => (p.id === perrito.id ? { ...p, avisos_habilitados: habilitados } : p)) ?? null,
+      );
+      const res = await fetch(`/api/perritos/${perrito.id}/avisos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...accessTokenHeader(session) },
+        body: JSON.stringify({ habilitados }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? 'No pudimos actualizar los avisos.');
+        setPerritos((prev) =>
+          prev?.map((p) => (p.id === perrito.id ? { ...p, avisos_habilitados: !habilitados } : p)) ?? null,
+        );
+      }
+    },
+    [session],
+  );
 
   useEffect(() => {
     if (loading) return;
@@ -132,27 +155,118 @@ export default function MisPublicacionesPage() {
                     <p className="text-xs font-black uppercase tracking-wide text-amber-700">
                       🤝 La IA encontró {perrito.matches.length === 1 ? 'una coincidencia' : `${perrito.matches.length} coincidencias`}
                     </p>
-                    <div className="mt-2 space-y-1.5">
-                      {perrito.matches.map((match) => (
-                        <Link
-                          key={match.contraparte_id}
-                          href={`/perrito/${match.contraparte_id}`}
-                          className="block rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
-                        >
-                          👀 Ver la publicación de la contraparte ·{' '}
-                          <span className="font-black">{match.porcentaje_similitud.toFixed(1)}%</span>
-                        </Link>
-                      ))}
+                    <div className="mt-2 space-y-2">
+                      {perrito.matches.map((match) => {
+                        const yaAutorice =
+                          perrito.rol_publicacion === 'PERDIDO'
+                            ? match.autorizacion?.dueno_autorizo
+                            : match.autorizacion?.encontrador_autorizo;
+                        // El chat se habilita cuando la CONTRAPARTE autorizó su contacto.
+                        const habilitada = chatHabilitadoPara(
+                          match.autorizacion ?? { dueno_autorizo: false, encontrador_autorizo: false },
+                          perrito.rol_publicacion,
+                        );
+                        return (
+                          <div key={match.contraparte_id} className="space-y-1">
+                            <Link
+                              href={`/perrito/${match.contraparte_id}`}
+                              className="block rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                            >
+                              👀 Ver la publicación de la contraparte ·{' '}
+                              <span className="font-black">{match.porcentaje_similitud.toFixed(1)}%</span>
+                            </Link>
+                            {habilitada ? (
+                              <Link
+                                href={`/chat/abrir?match=${match.match_id}`}
+                                className="block rounded-xl bg-emerald-600 px-3 py-2 text-center text-xs font-black text-white shadow transition hover:bg-emerald-700"
+                              >
+                                💬 Chatear con la contraparte
+                              </Link>
+                            ) : yaAutorice ? (
+                              <p className="px-1 text-[11px] font-semibold text-emerald-700">
+                                ✅ Ya compartiste tu contacto con esta persona. Cuando ella autorice,
+                                se habilita el chat aquí.
+                              </p>
+                            ) : (
+                              <Link
+                                href={`/compartir-contacto?match=${match.match_id}&rol=${perrito.rol_publicacion}`}
+                                className="block rounded-xl bg-amber-600 px-3 py-2 text-center text-xs font-black text-white transition hover:bg-amber-700"
+                              >
+                                🔓 Compartir mi contacto
+                              </Link>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
+
+                {perrito.avisos.length > 0 && (
+                  <div className="border-t border-sky-200 bg-sky-50 px-4 py-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-sky-700">
+                      👀 Avisos de testigos ({perrito.avisos.length})
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {perrito.avisos.map((aviso) => {
+                        const ultimo = aviso.ultimo_mensaje;
+                        return (
+                          <Link
+                            key={aviso.aviso_id}
+                            href={`/aviso/${aviso.aviso_id}`}
+                            className="flex items-center gap-2 rounded-xl border border-sky-300 bg-white px-3 py-2 text-sm text-neutral-700 transition hover:bg-sky-100"
+                          >
+                            <span className={`text-xs ${aviso.noLeidas > 0 ? 'font-bold text-rose-600' : ''}`}>
+                              {aviso.noLeidas > 0 && '● '}
+                              {ultimo
+                                ? `${ultimo.autor === 'avisador' ? 'Quien la vio' : 'Tú'}: ${ultimo.contenido.slice(0, 48)}${ultimo.contenido.length > 48 ? '…' : ''}`
+                                : 'Sin mensajes aún'}
+                            </span>
+                            <span className="ml-auto shrink-0 text-[10px] text-neutral-400">
+                              {timeAgo(ultimo?.creado_en ?? aviso.creado_en)}
+                            </span>
+                            <span className="shrink-0 text-xs font-bold text-sky-700">Abrir →</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 px-4 py-2.5">
+                  {perrito.avisos_habilitados ? (
+                    <button
+                      type="button"
+                      onClick={() => alternarAvisos(perrito, false)}
+                      className="rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-[11px] font-bold text-neutral-600 transition hover:bg-neutral-50"
+                    >
+                      🔕 Dejar de recibir avisos de testigos
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => alternarAvisos(perrito, true)}
+                      className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100"
+                    >
+                      🔔 Recibir avisos de testigos de nuevo
+                    </button>
+                  )}
+                  <span className="text-[10px] text-neutral-400">
+                    {perrito.avisos_habilitados
+                      ? 'Cualquiera que vea tu mascota puede avisarte.'
+                      : 'Los avisos están pausados; los hilos abiertos siguen visibles.'}
+                  </span>
+                </div>
               </div>
             );
           })}
         </div>
       </main>
       <footer className="border-t border-neutral-200 bg-white py-6 text-center text-xs text-neutral-400">
-        🐾 Patitas SOS · Plataforma para reconectar mascotas perdidas con sus familias
+        🐾 Patitas SOS ·{' '}
+        <a href="/politica-de-privacidad" className="underline">
+          Política de Privacidad
+        </a>
       </footer>
     </div>
   );

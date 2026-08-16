@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { timeAgo, whatsappLink } from '@/lib/format';
+import { timeAgo } from '@/lib/format';
 import { textosEspecie } from '@/lib/especie';
 import type { Perrito } from '@/lib/types';
 
@@ -18,10 +18,10 @@ function badgeDe(perrito: Perrito): { text: string; className: string } {
   return { text: '🏠 BUSCA SU DUEÑO', className: 'bg-sky-600 text-white' };
 }
 
-/** Tarjeta del feed: foto grande, descripción, zona y botón de WhatsApp. */
+/** Tarjeta del feed: foto grande, descripción y zona aproximada (sin datos
+ *  personales: el contacto solo se revela con un match + autorización). */
 export function PetCard({ perrito }: Props) {
   const badge = badgeDe(perrito);
-  const telefono = perrito.usuario?.telefono ?? '';
   const nombre =
     perrito.nombre_temporal ||
     textosEspecie(perrito.especie)[perrito.rol_publicacion === 'PERDIDO' ? 'perdido' : 'rescatado'];
@@ -56,19 +56,11 @@ export function PetCard({ perrito }: Props) {
         <p className="mt-1 line-clamp-3 text-sm text-neutral-600">{perrito.descripcion}</p>
         <p className="mt-2 flex items-center gap-1 text-sm font-medium text-neutral-500">
           📍 {perrito.departamento}, {perrito.ciudad}
-          {perrito.barrio_zona ? `, ${perrito.barrio_zona}` : ''}
         </p>
 
-        {telefono && (
-          <a
-            href={whatsappLink(telefono)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#1fb958]"
-          >
-            💬 Contactar por WhatsApp
-          </a>
-        )}
+        <span className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-200 px-4 py-2.5 text-sm font-bold text-neutral-600 transition group-hover:border-amber-400 group-hover:text-amber-600">
+          👀 Ver detalles
+        </span>
       </div>
     </article>
   );

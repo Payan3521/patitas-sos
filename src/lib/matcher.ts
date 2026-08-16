@@ -20,17 +20,21 @@ import {
 } from '@/lib/constants';
 import { compararFotos, type ComparacionFoto } from '@/lib/gemini';
 import { notificarMatch } from '@/lib/mail';
-import type { NotificacionEstado, Perrito, Usuario } from '@/lib/types';
+import type { AutorizacionContacto, NotificacionEstado, Perrito, Usuario } from '@/lib/types';
 
 export type PerritoConUsuario = Perrito & {
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'telefono' | 'email'> | null;
 };
 
 export interface ResultadoMatch {
+  /** Id del par en `matches_ia` (para autorizar compartir contacto). */
+  matchId: string;
   perrito: PerritoConUsuario;
   porcentaje_similitud: number;
   razon: string;
   notificacion: NotificacionEstado;
+  /** Estado de las autorizaciones de contacto del par. */
+  autorizacion: AutorizacionContacto;
 }
 
 export interface ContadorLlamadas {
@@ -223,6 +227,7 @@ async function notificarPorEmail(
   supabase: SupabaseClient,
   perdidoId: string,
   encontradoId: string,
+  matchId: string,
   porcentaje: number,
 ): Promise<NotificacionEstado> {
   const sinEnviar: NotificacionEstado = {
@@ -253,7 +258,7 @@ async function notificarPorEmail(
       return { ok: false, enviados: 0, total: 2, detalle: 'Faltan datos de una de las partes.' };
     }
 
-    const resultado = await notificarMatch({ perdido, encontrado, porcentajeSimilitud: porcentaje });
+    const resultado = await notificarMatch({ perdido, encontrado, matchId, porcentajeSimilitud: porcentaje });
     if (resultado.ok) {
       await supabase
         .from('matches_ia')
@@ -344,13 +349,29 @@ export async function buscarCoincidenciasPara(
       reporte.rol_publicacion === 'PERDIDO' ? mejor.candidato.id : reporte.id;
 
     await registrarMatch(supabase, perdidoId, encontradoId, porcentaje, mejor.dictamen.razon);
-    const notificacion = await notificarPorEmail(supabase, perdidoId, encontradoId, porcentaje);
+
+    const { data: filaMatch } = await supabase
+      .from('matches_ia')
+      .select('id, dueno_autorizo, encontrador_autorizo')
+      .eq('perrito_perdido_id', perdidoId)
+      .eq('perrito_encontrado_id', encontradoId)
+      .maybeSingle();
+
+    const matchId = filaMatch?.id ?? '';
+    const autorizacion: AutorizacionContacto = {
+      dueno_autorizo: !!filaMatch?.dueno_autorizo,
+      encontrador_autorizo: !!filaMatch?.encontrador_autorizo,
+    };
+
+    const notificacion = await notificarPorEmail(supabase, perdidoId, encontradoId, matchId, porcentaje);
 
     return {
+      matchId,
       perrito: mejor.candidato,
       porcentaje_similitud: porcentaje,
       razon: mejor.dictamen.razon,
       notificacion,
+      autorizacion,
     };
   } catch (error) {
     console.error('buscarCoincidenciasPara falló (no bloquea la publicación):', error);

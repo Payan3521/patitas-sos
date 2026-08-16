@@ -439,7 +439,12 @@ function FormularioPublicar({ perfil }: { perfil: { email: string; nombre: strin
         </button>
 
         <p className="text-center text-xs text-neutral-400">
-          🔒 Tus datos solo se comparten si la IA encuentra una coincidencia con otra publicación.
+          🔒 Tus datos de contacto (nombre, teléfono, correo y dirección) solo se muestran a otra
+          persona si tú lo autorizas cuando hay una coincidencia, conforme a nuestra{' '}
+          <Link href="/politica-de-privacidad" className="font-semibold text-amber-600 underline">
+            Política de Privacidad
+          </Link>
+          .
         </p>
       </form>
 

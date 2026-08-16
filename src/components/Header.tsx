@@ -7,28 +7,53 @@ import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 
 /**
  * Encabezado sticky con la marca, el estado de la sesión y el CTA de publicación.
- * Si hay sesión: email, "Mis publicaciones", campana de notificaciones con
+ * Si hay sesión: email, "Mis publicaciones", "Mis avisos" (con badge de
+ * no leídas de los hilos que iniciaste), campana de notificaciones con
  * contador de no leídas y botón para cerrar sesión.
  */
 export function Header() {
   const { session, email, loading, signOut } = useAuth();
   const router = useRouter();
   const [noLeidas, setNoLeidas] = useState(0);
+  const [chatNoLeidas, setChatNoLeidas] = useState(0);
+  const [misAvisosNoLeidas, setMisAvisosNoLeidas] = useState(0);
 
   useEffect(() => {
-    let cancel = false;
     if (!session) {
       setNoLeidas(0);
+      setChatNoLeidas(0);
+      setMisAvisosNoLeidas(0);
       return;
     }
-    fetch('/api/notificaciones', { headers: accessTokenHeader(session) })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancel) setNoLeidas(typeof data.noLeidas === 'number' ? data.noLeidas : 0);
-      })
-      .catch(() => {});
+    let cancel = false;
+    let intervalo: ReturnType<typeof setInterval> | null = null;
+
+    const actualizar = () => {
+      fetch('/api/notificaciones', { headers: accessTokenHeader(session) })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancel) {
+            const avisos = typeof data.avisosNoLeidos === 'number' ? data.avisosNoLeidos : 0;
+            setNoLeidas((typeof data.noLeidas === 'number' ? data.noLeidas : 0) + avisos);
+            setMisAvisosNoLeidas(
+              typeof data.avisosRecibidosNoLeidos === 'number' ? data.avisosRecibidosNoLeidos : 0,
+            );
+          }
+        })
+        .catch(() => {});
+      fetch('/api/mensajes', { headers: accessTokenHeader(session) })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancel) setChatNoLeidas(typeof data.noLeidasTotal === 'number' ? data.noLeidasTotal : 0);
+        })
+        .catch(() => {});
+    };
+
+    actualizar();
+    intervalo = setInterval(actualizar, 30_000);
     return () => {
       cancel = true;
+      if (intervalo) clearInterval(intervalo);
     };
   }, [session]);
 
@@ -66,6 +91,30 @@ export function Header() {
                 className="rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 sm:text-sm"
               >
                 📋 Mis publicaciones
+              </Link>
+              <Link
+                href="/mis-avisos"
+                title="Mis avisos"
+                className="relative rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 sm:text-sm"
+              >
+                👀 Mis avisos
+                {misAvisosNoLeidas > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-neutral-900 px-1 text-[10px] font-black text-white">
+                    {misAvisosNoLeidas > 9 ? '9+' : misAvisosNoLeidas}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/chat"
+                title="Chat"
+                className="relative rounded-full border border-neutral-300 bg-white p-2.5 text-sm transition hover:bg-neutral-50"
+              >
+                💬
+                {chatNoLeidas > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-black text-white">
+                    {chatNoLeidas > 9 ? '9+' : chatNoLeidas}
+                  </span>
+                )}
               </Link>
               <Link
                 href="/notificaciones"

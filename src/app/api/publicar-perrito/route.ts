@@ -31,7 +31,8 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FOTOS_BUCKET, MAX_IMAGE_BYTES } from '@/lib/constants';
-import { buscarCoincidenciasPara, type ResultadoMatch } from '@/lib/matcher';
+import { buscarCoincidenciasPara } from '@/lib/matcher';
+import { contactoVisible } from '@/lib/permisos';
 import { leerSesion } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { validatePublicarInput, type PublicarInput } from '@/lib/validators';
@@ -148,15 +149,27 @@ export async function POST(request: NextRequest) {
     const match = await buscarCoincidenciasPara(supabase, perritoId);
 
     if (match) {
+      // 🔒 Privacidad: el contacto de la contraparte solo viaja si ella
+      // autorizó compartirlo (match recién creado → normalmente no).
+      const autorizacion = match.autorizacion;
+      const contactoVisibleContraparte = contactoVisible(true, match.perrito.rol_publicacion, autorizacion);
+
       return json({
         ok: true,
         match: true,
         perritoId,
         matchInfo: {
-          perrito: match.perrito,
-          usuario:
-            match.perrito.usuario ?? { id: '', nombre: '', telefono: '', email: null },
+          matchId: match.matchId,
+          // 🔒 El barrio es dato personal (Política): solo viaja si la
+          // contraparte autorizó compartir su contacto (igual que `usuario`).
+          perrito: {
+            ...match.perrito,
+            usuario: null,
+            barrio_zona: contactoVisibleContraparte ? (match.perrito.barrio_zona ?? null) : null,
+          },
+          usuario: contactoVisibleContraparte ? (match.perrito.usuario ?? null) : null,
           porcentaje_similitud: match.porcentaje_similitud,
+          autorizacion,
           notificacion: match.notificacion,
         },
       });

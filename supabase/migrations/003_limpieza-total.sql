@@ -13,7 +13,16 @@
 --        [ -n "$FACE_IDS" ] && aws rekognition delete-faces --collection-id perritos \
 --          --region us-east-1 --face-ids $FACE_IDS
 --
--- El script es AUTOCONTENIDO: borra todo y recrea el esquema actual completo.
+-- El script es AUTOCONTENIDO: borra todo y recrea el esquema base.
+--
+-- ⚠️ Después de este reset hay que re-ejecutar las migraciones al día,
+--    en este orden (todas son idempotentes):
+--      004_login-propio.sql   (password_hash)
+--      005_gemini-ia.sql      (comparaciones + razon + cron)
+--      006_especie.sql        (especie perro/gato)
+--      007_consentimiento.sql (banderas de autorización + consentimientos)
+--      008_chat.sql           (conversaciones + mensajes)
+--      009_avistamientos.sql  (👀 avisos de testigos + mensajes_aviso)
 --
 -- ⚠️  LAS FOTOS DEL BUCKET NO SE BORRAN DESDE AQUÍ:
 --     Supabase bloquea el borrado directo de storage.objects y el ALTER de su
@@ -26,6 +35,12 @@
 -- ----------------------------------------------------------------------------
 -- 1. BORRAR TODO (tablas, enums, políticas y fotos del bucket)
 -- ----------------------------------------------------------------------------
+drop table if exists public.mensajes_aviso cascade;
+drop table if exists public.avistamientos cascade;
+drop table if exists public.mensajes cascade;
+drop table if exists public.conversaciones cascade;
+drop table if exists public.consentimientos cascade;
+drop table if exists public.comparaciones cascade;
 drop table if exists public.notificaciones cascade;
 drop table if exists public.matches_ia cascade;
 drop table if exists public.perritos cascade;

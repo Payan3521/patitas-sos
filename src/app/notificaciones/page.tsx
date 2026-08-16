@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 import { Header } from '@/components/Header';
+import { chatHabilitadoPara } from '@/lib/chat';
 import { formatPhone, timeAgo, whatsappLink } from '@/lib/format';
 import { textosEspecie } from '@/lib/especie';
 import type { Notificacion, NotificacionesResponse } from '@/lib/types';
@@ -138,7 +139,13 @@ export default function NotificacionesPage() {
             const nombreContraparte =
               contraparte?.nombre_temporal ||
               textosEspecie(contraparte?.especie)[esContraparteRescatada ? 'rescatado' : 'perdida'];
-            const contacto = contraparte?.usuario;
+            const contacto = notificacion.contacto ?? null;
+            const autorizacion = notificacion.autorizacion ?? { dueno_autorizo: false, encontrador_autorizo: false };
+            const miRol = notificacion.mi_perrito?.rol_publicacion;
+            const yaAutorice =
+              miRol === 'PERDIDO' ? autorizacion.dueno_autorizo : autorizacion.encontrador_autorizo;
+            const chatHabilitado =
+              !!notificacion.match_id && chatHabilitadoPara(autorizacion, miRol);
             const yaMarcada = marcadas[notificacion.id] === 'ok';
             const falloMarcada = marcadas[notificacion.id] === 'error';
 
@@ -210,7 +217,7 @@ export default function NotificacionesPage() {
                     </div>
                   </Link>
 
-                  {/* --- Datos de contacto de la contraparte (como el correo) --- */}
+                  {/* --- Datos de contacto — 🔒 SOLO si la contraparte autorizó --- */}
                   {contacto?.nombre || contacto?.telefono || contacto?.email ? (
                     <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
                       <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">
@@ -244,7 +251,32 @@ export default function NotificacionesPage() {
                         </div>
                       )}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50/80 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-neutral-500">
+                        🔒 Datos de contacto protegidos
+                      </p>
+                      {yaAutorice ? (
+                        <p className="mt-1 text-xs text-neutral-600">
+                          Ya compartiste tu contacto con esta persona (le llegó un correo). La otra
+                          persona aún no autoriza mostrar los suyos.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-xs text-neutral-600">
+                            Por privacidad, los datos solo se muestran cuando cada persona los
+                            autoriza. Comparte los tuyos para que la contraparte pueda contactarte.
+                          </p>
+                          <Link
+                            href={`/compartir-contacto?match=${notificacion.match_id ?? ''}&rol=${miRol ?? 'PERDIDO'}`}
+                            className="mt-2 inline-block rounded-full bg-amber-500 px-4 py-2 text-xs font-black text-white shadow transition hover:bg-amber-600"
+                          >
+                            🔓 Compartir mi información de contacto
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* --- Acciones --- */}
                   <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -255,6 +287,15 @@ export default function NotificacionesPage() {
                     >
                       🐾 Ver la mascota {esDueño ? 'encontrada' : 'perdida'}
                     </Link>
+
+                    {chatHabilitado && (
+                      <Link
+                        href={`/chat/abrir?match=${notificacion.match_id}`}
+                        className="rounded-full bg-neutral-900 px-4 py-2 text-sm font-black text-white shadow transition hover:bg-neutral-700"
+                      >
+                        💬 Chatear
+                      </Link>
+                    )}
 
                     {esDueño && !yaMarcada && notificacion.mi_perrito?.estado !== 'ENCONTRADA' && (
                       <button
@@ -281,7 +322,10 @@ export default function NotificacionesPage() {
         </div>
       </main>
       <footer className="border-t border-neutral-200 bg-white py-6 text-center text-xs text-neutral-400">
-        🐾 Patitas SOS · Plataforma para reconectar mascotas perdidas con sus familias
+        🐾 Patitas SOS ·{' '}
+        <a href="/politica-de-privacidad" className="underline">
+          Política de Privacidad
+        </a>
       </footer>
     </div>
   );

@@ -3,7 +3,8 @@
 // 🐾 PATITAS SOS — Limpieza total (base + fotos)
 //
 // Borra TODO el contenido de la app para probar desde ceros:
-//   - Filas de las tablas: comparaciones, matches_ia,
+//   - Filas de las tablas: mensajes_aviso, avistamientos, mensajes,
+//     conversaciones, consentimientos, comparaciones, matches_ia,
 //     notificaciones, perritos y usuarios (en ese orden por
 //     dependencias entre tablas).
 //   - Todos los archivos del bucket público `fotos-perritos`.
@@ -20,7 +21,18 @@ import path from 'node:path';
 const ARCHIVO_ENV = path.join(process.cwd(), '.env.local');
 const BUCKET = 'fotos-perritos';
 const UUID_MUERTO = '00000000-0000-0000-0000-000000000000';
-const TABLAS = ['comparaciones', 'matches_ia', 'notificaciones', 'perritos', 'usuarios'];
+const TABLAS = [
+  'mensajes_aviso',
+  'avistamientos',
+  'mensajes',
+  'conversaciones',
+  'consentimientos',
+  'comparaciones',
+  'matches_ia',
+  'notificaciones',
+  'perritos',
+  'usuarios',
+];
 
 // ------------------------------------------------------------
 // Lectura del .env.local (parser minimalista, sin dependencias)
@@ -113,7 +125,8 @@ async function colectarArchivos() {
     const prefijo = cola.shift();
     const items = await listarPrefijo(prefijo);
     for (const item of items) {
-      const esCarpeta = item.id?.endsWith('/') ?? item.name.endsWith('/');
+      const esCarpeta =
+        item.id === null || (item.id?.endsWith('/') ?? item.name.endsWith('/'));
       if (esCarpeta) {
         cola.push(`${prefijo}${item.name}/`);
       } else {

@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { whatsappLink } from '@/lib/format';
 import { textosEspecie } from '@/lib/especie';
@@ -25,10 +26,16 @@ export function MatchModal({ matchInfo, onClose }: Props) {
     };
   }, []);
 
-  const { perrito, usuario, porcentaje_similitud } = matchInfo;
-  const telefono = usuario.telefono ?? '';
+  const { perrito, usuario, porcentaje_similitud, matchId, autorizacion } = matchInfo;
   const esRescatista = perrito.rol_publicacion === 'BUSCA_DUEÑO';
   const nombre = perrito.nombre_temporal || textosEspecie(perrito.especie)[esRescatista ? 'rescatado' : 'perdido'];
+  // Mi rol es el opuesto al de la contraparte mostrada.
+  const rolParaAutorizar = esRescatista ? 'PERDIDO' : 'BUSCA_DUEÑO';
+  const yaAutorice =
+    rolParaAutorizar === 'PERDIDO'
+      ? (autorizacion?.dueno_autorizo ?? false)
+      : (autorizacion?.encontrador_autorizo ?? false);
+  const telefono = usuario?.telefono ?? '';
 
   return (
     <div
@@ -72,32 +79,61 @@ export function MatchModal({ matchInfo, onClose }: Props) {
             </div>
           </div>
 
-          {/* Datos de contacto de la contraparte */}
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">
-              Datos de {esRescatista ? 'la persona que lo rescató' : 'la persona que lo busca'}
-            </p>
-            <p className="mt-1 text-base font-extrabold text-neutral-900">{usuario.nombre}</p>
-            <p className="text-sm text-neutral-700">📞 {telefono}</p>
-            {usuario.email && <p className="truncate text-sm text-neutral-700">✉️ {usuario.email}</p>}
-          </div>
+          {/* Datos de contacto — 🔒 SOLO si la contraparte autorizó compartirlos */}
+          {usuario?.nombre ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">
+                Datos de {esRescatista ? 'la persona que lo rescató' : 'la persona que lo busca'}
+              </p>
+              <p className="mt-1 text-base font-extrabold text-neutral-900">{usuario.nombre}</p>
+              <p className="text-sm text-neutral-700">📞 {telefono}</p>
+              {usuario.email && <p className="truncate text-sm text-neutral-700">✉️ {usuario.email}</p>}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-[11px] font-black uppercase tracking-wide text-neutral-500">
+                🔒 Datos de contacto protegidos
+              </p>
+              <p className="mt-1 text-sm text-neutral-600">
+                Por privacidad, esta coincidencia <b>no revela datos personales de la otra persona</b>.
+                Solo les llegan a ambos un correo con el botón «Compartir mi información de contacto»;
+                cuando alguien autoriza, la otra parte los recibe al instante.
+              </p>
+              {yaAutorice ? (
+                <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                  ✅ Ya compartiste tu contacto con esta persona: llegará a su correo.
+                </p>
+              ) : (
+                <Link
+                  href={`/compartir-contacto?match=${matchId}&rol=${rolParaAutorizar}`}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-amber-500 px-5 py-3 text-sm font-black text-white shadow transition hover:bg-amber-600"
+                >
+                  🔓 Compartir mi información de contacto
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Acciones */}
           <div className="mt-5 space-y-2.5">
-            <a
-              href={whatsappLink(telefono)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 text-base font-extrabold text-white shadow transition hover:bg-[#1fb958]"
-            >
-              💬 Escribir por WhatsApp
-            </a>
-            <a
-              href={`tel:${telefono}`}
-              className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-300 bg-white px-5 py-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-50"
-            >
-              📞 Llamar ahora
-            </a>
+            {telefono && (
+              <a
+                href={whatsappLink(telefono)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 text-base font-extrabold text-white shadow transition hover:bg-[#1fb958]"
+              >
+                💬 Escribir por WhatsApp
+              </a>
+            )}
+            {telefono && (
+              <a
+                href={`tel:${telefono}`}
+                className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-300 bg-white px-5 py-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-50"
+              >
+                📞 Llamar ahora
+              </a>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -108,10 +144,11 @@ export function MatchModal({ matchInfo, onClose }: Props) {
           </div>
 
           <p className="mt-4 rounded-xl bg-neutral-100 px-4 py-3 text-xs leading-relaxed text-neutral-600">
-            💌 Tu reporte <b>sigue publicado</b>. También enviamos un correo a{' '}
-            {esRescatista ? 'la persona que busca a la mascota' : 'quien la encontró'} con tus datos
-            y esta coincidencia. Si confirma que es la misma mascota, ambos reportes pasarán a la
-            lista de <b>Encontradas</b>.
+            💌 Tu reporte <b>sigue publicado</b>. Enviamos un correo a{' '}
+            {esRescatista ? 'la persona que busca a la mascota' : 'quien la encontró'} con esta
+            coincidencia — <b>sin tus datos de contacto</b>: tú decides cuándo compartirlos con el
+            botón «Compartir mi información de contacto». Si confirma que es la misma mascota, ambos
+            reportes pasarán a la lista de <b>Encontradas</b>.
           </p>
 
           {matchInfo.notificacion && (

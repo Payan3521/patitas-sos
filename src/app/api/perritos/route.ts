@@ -19,6 +19,17 @@ import type { Perrito } from '@/lib/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/** Sandbox de privacidad para el feed público: nunca expone datos personales
+ *  (contacto del publicador ni barrio). El contacto solo llega con un match +
+ *  autorización expresa (ver src/lib/permisos.ts). */
+function sandboxPrivacidad(perrito: Perrito): Perrito {
+  return {
+    ...perrito,
+    barrio_zona: null,
+    usuario: null,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -38,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('perritos')
-      .select('*, usuario:usuarios(id, nombre, telefono, email)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .order('creado_en', { ascending: false });
 
     if (estado === 'ACTIVO' || estado === 'ENCONTRADA') {
@@ -66,7 +77,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perritos = (data ?? []) as Perrito[];
+    const perritos = (data ?? []).map((p) => sandboxPrivacidad(p as Perrito));
     const total = count ?? perritos.length;
 
     return NextResponse.json({
