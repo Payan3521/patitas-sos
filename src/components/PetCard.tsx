@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { timeAgo, whatsappLink } from '@/lib/format';
+import { textosEspecie } from '@/lib/especie';
 import type { Perrito } from '@/lib/types';
 
 interface Props {
@@ -23,7 +24,7 @@ export function PetCard({ perrito }: Props) {
   const telefono = perrito.usuario?.telefono ?? '';
   const nombre =
     perrito.nombre_temporal ||
-    (perrito.rol_publicacion === 'PERDIDO' ? 'Mi perrito' : 'Perrito rescatado');
+    textosEspecie(perrito.especie)[perrito.rol_publicacion === 'PERDIDO' ? 'perdido' : 'rescatado'];
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition hover:shadow-md">

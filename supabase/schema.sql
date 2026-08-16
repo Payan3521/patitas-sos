@@ -33,13 +33,14 @@ create table if not exists public.perritos (
   id               uuid primary key default gen_random_uuid(),
   usuario_id       uuid not null references public.usuarios (id) on delete cascade,
   rol_publicacion  public.rol_publicacion not null,
+  especie          text not null default 'perro' check (especie in ('perro', 'gato')),
   nombre_temporal  text,
   descripcion      text not null,
   departamento     text not null,
   ciudad           text not null,
   barrio_zona      text,
   foto_url         text not null,
-  aws_face_id      varchar(128) unique,
+  aws_face_id      varchar(128) unique,  -- DEPRECADA (era AWS Rekognition); se conserva por datos viejos
   estado           public.estado_perrito not null default 'ACTIVO',
   creado_en        timestamptz not null default now()
 );
@@ -52,7 +53,7 @@ create index if not exists perritos_rol_idx         on public.perritos (rol_publ
 create index if not exists perritos_aws_face_id_idx on public.perritos (aws_face_id);
 
 -- ----------------------------------------------------------------------------
--- 4. Tabla: matches_ia  (coincidencias encontradas por AWS Rekognition)
+-- 4. Tabla: matches_ia  (coincidencias encontradas por la IA — Gemini Flash)
 -- ----------------------------------------------------------------------------
 create table if not exists public.matches_ia (
   id                    uuid primary key default gen_random_uuid(),
@@ -60,12 +61,33 @@ create table if not exists public.matches_ia (
   perrito_encontrado_id uuid not null references public.perritos (id) on delete cascade,
   porcentaje_similitud  real not null check (porcentaje_similitud between 0 and 100),
   notificados           boolean not null default false,
+  razon                 text,
   creado_en             timestamptz not null default now(),
   unique (perrito_perdido_id, perrito_encontrado_id)
 );
 
 create index if not exists matches_ia_perdido_idx    on public.matches_ia (perrito_perdido_id);
 create index if not exists matches_ia_encontrado_idx on public.matches_ia (perrito_encontrado_id);
+
+-- ----------------------------------------------------------------------------
+-- 4.1 Tabla: comparaciones  (pares ya analizados por la IA — Gemini Flash)
+--     El par se guarda en orden canónico (ids alfabéticos): (A,B) y (B,A)
+--     son la misma comparación, así el cron/re-publicaciones no llaman a
+--     Gemini dos veces por el mismo par.
+-- ----------------------------------------------------------------------------
+create table if not exists public.comparaciones (
+  id              uuid primary key default gen_random_uuid(),
+  perrito_a_id    uuid not null references public.perritos (id) on delete cascade,
+  perrito_b_id    uuid not null references public.perritos (id) on delete cascade,
+  es_mismo        boolean not null default false,
+  similitud       real not null check (similitud between 0 and 100),
+  razon           text,
+  creado_en       timestamptz not null default now(),
+  unique (perrito_a_id, perrito_b_id)
+);
+
+create index if not exists comparaciones_a_idx on public.comparaciones (perrito_a_id);
+create index if not exists comparaciones_b_idx on public.comparaciones (perrito_b_id);
 
 -- ----------------------------------------------------------------------------
 -- 5. Row Level Security (RLS)
@@ -75,6 +97,7 @@ create index if not exists matches_ia_encontrado_idx on public.matches_ia (perri
 alter table public.usuarios   enable row level security;
 alter table public.perritos   enable row level security;
 alter table public.matches_ia enable row level security;
+alter table public.comparaciones enable row level security;
 
 -- Lectura pública del feed: reportes ACTIVOS y marcados como ENCONTRADA.
 -- (Los datos de contacto se sirven vía API con la service role key.)

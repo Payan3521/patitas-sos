@@ -12,32 +12,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Caché local de npm (~/.npm) para que npm ci funcione sin depender
+      # de la red (se copia al contenedor en la etapa deps del Dockerfile)
+      additional_contexts:
+        npm_cache: ${HOME}/.npm
       args:
         # Se inyectan en build time (se incrustan en el bundle del cliente)
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     image: patitas-sos:latest
     container_name: patitas-sos
     restart: unless-stopped
+    # DNS fijo: no depende del resolver del host (cambia con la red WiFi)
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       - "3000:3000"
     env_file:
       - .env.local
     environment:
-      # Variables secretas: se leen en runtime por las API Routes
+      # Todas las demás variables (secretas y de configuración) entran
+      # desde `.env.local` vía env_file; aquí solo lo que NO está en ella
       NODE_ENV: production
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION}
-      AWS_REKOGNITION_COLLECTION_ID: ${AWS_REKOGNITION_COLLECTION_ID}
-      # Notificaciones por correo (Resend)
-      RESEND_API_KEY: ${RESEND_API_KEY}
-      EMAIL_FROM: ${EMAIL_FROM}
-      APP_URL: ${APP_URL}
-      APP_TOKEN_SECRET: ${APP_TOKEN_SECRET}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -1,20 +1,101 @@
-import Link from 'next/link';
+'use client';
 
-/** Encabezado sticky con la marca y el CTA de publicación. */
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
+
+/**
+ * Encabezado sticky con la marca, el estado de la sesión y el CTA de publicación.
+ * Si hay sesión: email, "Mis publicaciones", campana de notificaciones con
+ * contador de no leídas y botón para cerrar sesión.
+ */
 export function Header() {
+  const { session, email, loading, signOut } = useAuth();
+  const router = useRouter();
+  const [noLeidas, setNoLeidas] = useState(0);
+
+  useEffect(() => {
+    let cancel = false;
+    if (!session) {
+      setNoLeidas(0);
+      return;
+    }
+    fetch('/api/notificaciones', { headers: accessTokenHeader(session) })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancel) setNoLeidas(typeof data.noLeidas === 'number' ? data.noLeidas : 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  }, [session]);
+
+  async function cerrarSesion() {
+    await signOut();
+    router.push('/');
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/85 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 text-xl font-black tracking-tight text-neutral-900">
           <span className="text-2xl">🐾</span>
           Patitas <span className="text-amber-500">SOS</span>
         </Link>
-        <Link
-          href="/publicar"
-          className="rounded-full bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-amber-600"
-        >
-          + Publicar
-        </Link>
+
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {!loading && !session && (
+            <Link
+              href="/iniciar-sesion"
+              className="rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 sm:text-sm"
+            >
+              Iniciar sesión
+            </Link>
+          )}
+
+          {!loading && session && (
+            <>
+              <span className="hidden max-w-40 truncate text-xs font-semibold text-neutral-600 md:inline">
+                {email}
+              </span>
+              <Link
+                href="/mis-publicaciones"
+                title="Mis publicaciones"
+                className="rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 sm:text-sm"
+              >
+                📋 Mis publicaciones
+              </Link>
+              <Link
+                href="/notificaciones"
+                title="Notificaciones"
+                className="relative rounded-full border border-neutral-300 bg-white p-2.5 text-sm transition hover:bg-neutral-50"
+              >
+                🔔
+                {noLeidas > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">
+                    {noLeidas > 9 ? '9+' : noLeidas}
+                  </span>
+                )}
+              </Link>
+              <button
+                type="button"
+                onClick={cerrarSesion}
+                className="rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-500 transition hover:bg-neutral-50 sm:text-sm"
+              >
+                Salir
+              </button>
+            </>
+          )}
+
+          <Link
+            href="/publicar"
+            className="rounded-full bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-amber-600"
+          >
+            + Publicar
+          </Link>
+        </div>
       </div>
     </header>
   );

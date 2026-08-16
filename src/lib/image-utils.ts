@@ -5,7 +5,7 @@
 //   1) Baja la calidad JPEG progresivamente.
 //   2) Si aún pesa mucho, reduce también las dimensiones.
 // Así ahorramos almacenamiento en el plan gratuito de Supabase
-// y cumplimos el límite de AWS Rekognition.
+// y reducimos lo que enviamos a Gemini (más barato y rápido).
 // ============================================================
 
 export const MAX_IMAGE_BYTES = 200 * 1024; // 200 KB

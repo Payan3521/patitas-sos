@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect } from 'react';
 import { whatsappLink } from '@/lib/format';
+import { textosEspecie } from '@/lib/especie';
 import type { MatchInfo } from '@/lib/types';
 
 interface Props {
@@ -27,7 +28,7 @@ export function MatchModal({ matchInfo, onClose }: Props) {
   const { perrito, usuario, porcentaje_similitud } = matchInfo;
   const telefono = usuario.telefono ?? '';
   const esRescatista = perrito.rol_publicacion === 'BUSCA_DUEÑO';
-  const nombre = perrito.nombre_temporal || (esRescatista ? 'Perrito rescatado' : 'Perrito perdido');
+  const nombre = perrito.nombre_temporal || textosEspecie(perrito.especie)[esRescatista ? 'rescatado' : 'perdido'];
 
   return (
     <div
@@ -121,9 +122,30 @@ export function MatchModal({ matchInfo, onClose }: Props) {
                   : 'bg-rose-50 text-rose-800'
               }`}
             >
-              {matchInfo.notificacion.ok
-                ? '📧 Correos de aviso enviados a ambas partes.'
-                : `⚠️ Los correos de aviso no pudieron enviarse: ${matchInfo.notificacion.detalle} Tu reporte quedó publicado igual.`}
+              {matchInfo.notificacion.ok ? (
+                '📧 Correos de aviso enviados a ambas partes.'
+              ) : (
+                <>
+                  <p>
+                    ⚠️ Los correos de aviso no pudieron enviarse:{' '}
+                    {matchInfo.notificacion.detalle} Tu reporte quedó publicado igual.
+                  </p>
+                  <p className="mt-1.5">
+                    💡 Verifica en{' '}
+                    <a
+                      href="https://brevo.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold underline"
+                    >
+                      Brevo (cuenta por email)
+                    </a>{' '}
+                    que `BREVO_API_KEY` y `BREVO_FROM` estén bien en el servidor y que el
+                    remitente esté verificado por clic (SMTP & API → Senders). El aviso web
+                    🔔 de esta coincidencia ya quedó en tu bandeja de todos modos.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

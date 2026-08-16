@@ -6,14 +6,21 @@
 //   2. La foto ya llega comprimida ≤ 200 KB desde el cliente;
 //      el servidor valida el tamaño por seguridad.
 //   3. Sube la foto al bucket público 'fotos-perritos' (Supabase Storage).
-//   4. IndexFacesCommand → registra la cara en AWS Rekognition → FaceId.
-//   5. Guarda el reporte en la tabla `perritos` (incluye aws_face_id).
-//   6. SearchFacesByImageCommand con umbral 85.0 %.
-//   7. Si hay match con rol opuesto y reporte ACTIVO:
+//   4. Guarda el reporte en la tabla `perritos`.
+//   5. Gemini Flash compara la foto contra los reportes ACTIVOS de rol
+//      opuesto (misma ciudad → departamento → país, hasta 12).
+//   6. Si hay match (es_mismo y similitud ≥ 80 %):
 //      - Registra el par en `matches_ia` (SIN cambiar estados).
 //      - Notifica por EMAIL a ambas partes (dueño + rescatista) con
 //        enlace a la publicación y botón para marcar como encontrada.
+//      - Inserta notificaciones WEB para ambas partes (tabla `notificaciones`).
 //      - Devuelve `match: true` con los datos de contacto de la contraparte.
+//   La publicación NUNCA falla por la IA: si Gemini no responde, el reporte
+//   queda guardado igual y la revisión diaria lo cruzará después.
+//
+// IMPORTANTE: EXIGE SESIÓN iniciada (login propio: email + contraseña en
+// cookie httpOnly). El email del formulario ya no existe: se toma de la
+// sesión. Sin sesión válida se responde 401 y el reporte NO se publica.
 //
 // IMPORTANTE: la publicación NUNCA se elimina ni se reconcilia de forma
 // automática. Solo el dueño (o el publicador verificado) puede marcarla
@@ -23,31 +30,14 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { FACE_MATCH_THRESHOLD, FOTOS_BUCKET, MAX_IMAGE_BYTES } from '@/lib/constants';
-import {
-  deleteFace,
-  indexFace,
-  NoFaceDetectedError,
-  searchFacesByImage,
-  type FaceMatch,
-} from '@/lib/rekognition';
-import { notificarMatch } from '@/lib/mail';
+import { FOTOS_BUCKET, MAX_IMAGE_BYTES } from '@/lib/constants';
+import { buscarCoincidenciasPara, type ResultadoMatch } from '@/lib/matcher';
+import { leerSesion } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase-server';
-import type { NotificacionEstado, Perrito } from '@/lib/types';
 import { validatePublicarInput, type PublicarInput } from '@/lib/validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type PerritoConUsuario = Perrito & {
-  usuario?: { id: string; nombre: string; telefono: string; email: string | null } | null;
-};
-
-type ResultadoMatch = {
-  perrito: PerritoConUsuario;
-  porcentaje_similitud: number;
-  notificacion: NotificacionEstado;
-};
 
 const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
 
@@ -56,9 +46,15 @@ export async function POST(request: NextRequest) {
   let perritoId = '';
   let fotoPath = '';
   let fotoSubida = false;
-  let faceId: string | null = null;
 
   try {
+    // --- 0. Exigir sesión iniciada (login propio: email + contraseña) ---
+    const sesion = leerSesion(request);
+    if (!sesion?.email) {
+      return json({ ok: false, error: 'Debes iniciar sesión para publicar un reporte.' }, 401);
+    }
+    const emailSesion = sesion.email.toLowerCase();
+
     let formData: FormData;
     try {
       formData = await request.formData();
@@ -74,7 +70,7 @@ export async function POST(request: NextRequest) {
     // --- 2. Validar la foto ---
     const foto = formData.get('foto');
     if (!(foto instanceof File)) {
-      return json({ ok: false, error: 'Sube una foto del rostro de la mascota.' }, 400);
+      return json({ ok: false, error: 'Sube una foto de la mascota.' }, 400);
     }
     if (!foto.type.startsWith('image/')) {
       return json({ ok: false, error: 'El archivo debe ser una imagen (JPG, PNG o WebP).' }, 400);
@@ -96,8 +92,12 @@ export async function POST(request: NextRequest) {
     supabase = createServerSupabase();
     perritoId = randomUUID();
 
-    // --- 3. Reutilizar (o crear) el usuario ---
-    const usuarioId = await findOrCreateUsuario(supabase, input);
+    // --- 3. Reutilizar (o crear) el usuario ligado a la sesión ---
+    const usuarioId = await findOrCreateUsuario(supabase, {
+      nombre: input.nombre,
+      telefono: input.telefono,
+      email: emailSesion,
+    });
 
     // --- 4. Subir foto al bucket público 'fotos-perritos' ---
     fotoPath = `perritos/${perritoId}.jpg`;
@@ -117,39 +117,20 @@ export async function POST(request: NextRequest) {
     const { data: publicUrlData } = supabase.storage.from(FOTOS_BUCKET).getPublicUrl(fotoPath);
     const fotoUrl = publicUrlData.publicUrl;
 
-    // --- 5. Registrar la cara en AWS Rekognition (IndexFaces) ---
-    try {
-      faceId = await indexFace(imageBytes, perritoId);
-    } catch (error) {
-      if (error instanceof NoFaceDetectedError) {
-        // Limpiar la foto huérfana y pedir otra foto clara
-        await supabase.storage.from(FOTOS_BUCKET).remove([fotoPath]).catch(() => {});
-        return json(
-          {
-            ok: false,
-            error:
-              'No detectamos una cara clara en la foto. Por favor intenta con otra foto del rostro, de frente y con buena luz.',
-          },
-          422,
-        );
-      }
-      throw error;
-    }
-
-    // --- 6. Guardar el reporte en `perritos` ---
+    // --- 5. Guardar el reporte en `perritos` ---
     const { data: perritoNuevo, error: insertError } = await supabase
       .from('perritos')
       .insert({
         id: perritoId,
         usuario_id: usuarioId,
         rol_publicacion: input.rol,
+        especie: input.especie,
         nombre_temporal: input.nombreTemporal,
         descripcion: input.descripcion,
         departamento: input.departamento,
         ciudad: input.ciudad,
         barrio_zona: input.barrioZona,
         foto_url: fotoUrl,
-        aws_face_id: faceId,
         estado: 'ACTIVO',
       })
       .select('*')
@@ -157,13 +138,14 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !perritoNuevo) {
       console.error('Insert en perritos falló:', insertError);
-      await limpiarRecursos(supabase, fotoPath, faceId);
+      await supabase.storage.from(FOTOS_BUCKET).remove([fotoPath]).catch(() => {});
       return json({ ok: false, error: 'No pudimos guardar el reporte. Intenta de nuevo.' }, 500);
     }
 
-    // --- 7. Buscar coincidencias con AWS Rekognition (SearchFacesByImage, 85%) ---
+    // --- 6. Buscar coincidencias con Gemini Flash ---
     //     El match NO toca los estados: solo registra el par y avisa por correo.
-    const match = await buscarCoincidencias(supabase, input, imageBytes, perritoId);
+    //     Si la IA falla, el reporte ya quedó publicado (match: false).
+    const match = await buscarCoincidenciasPara(supabase, perritoId);
 
     if (match) {
       return json({
@@ -187,9 +169,6 @@ export async function POST(request: NextRequest) {
     if (supabase && fotoSubida && fotoPath) {
       await supabase.storage.from(FOTOS_BUCKET).remove([fotoPath]).catch(() => {});
     }
-    if (supabase && faceId) {
-      await deleteFace(faceId).catch(() => {});
-    }
     return json({ ok: false, error: 'Ocurrió un error interno. Por favor intenta de nuevo.' }, 500);
   }
 }
@@ -198,17 +177,34 @@ export async function POST(request: NextRequest) {
 // Helpers
 // ----------------------------------------------------------------------------
 
-/** Reutiliza el usuario existente (por email o teléfono) o crea uno nuevo. */
+/** Reutiliza el usuario existente (por email) o crea uno nuevo. */
 async function findOrCreateUsuario(
   supabase: SupabaseClient,
-  input: PublicarInput,
+  input: { nombre: string; telefono: string; email: string },
 ): Promise<string> {
-  const { data: existing } = await supabase.from('usuarios').select('id').eq('email', input.email).maybeSingle();
-  if (existing) return existing.id;
+  const { data: existing } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('email', input.email)
+    .maybeSingle();
+
+  if (existing) {
+    // Mantener actualizados nombre/teléfono
+    const { error: updateError } = await supabase
+      .from('usuarios')
+      .update({ nombre: input.nombre, telefono: input.telefono })
+      .eq('id', existing.id);
+    if (updateError) console.error('Actualizar usuario falló:', updateError);
+    return existing.id;
+  }
 
   const { data, error } = await supabase
     .from('usuarios')
-    .insert({ nombre: input.nombre, email: input.email, telefono: input.telefono })
+    .insert({
+      nombre: input.nombre,
+      email: input.email,
+      telefono: input.telefono,
+    })
     .select('id')
     .single();
 
@@ -217,120 +213,4 @@ async function findOrCreateUsuario(
     throw new Error('No se pudo registrar el usuario.');
   }
   return data.id;
-}
-
-/**
- * Busca coincidencias faciales ≥ 85 % con reportes ACTIVOS de rol opuesto.
- * Si encuentra una válida:
- *   - Registra el par en `matches_ia` (ON CONFLICT DO NOTHING).
- *   - Notifica por email a ambas partes (si el par aún no fue notificado).
- * NUNCA cambia el estado de los reportes: solo el dueño decide.
- */
-async function buscarCoincidencias(
-  supabase: SupabaseClient,
-  input: PublicarInput,
-  imageBytes: Buffer,
-  perritoId: string,
-): Promise<ResultadoMatch | null> {
-  let faceMatches: FaceMatch[] = [];
-  try {
-    faceMatches = await searchFacesByImage(imageBytes, FACE_MATCH_THRESHOLD);
-  } catch (error) {
-    // La búsqueda falló, pero el reporte ya quedó guardado:
-    // se devuelve éxito sin match (no bloquear la publicación).
-    console.error('SearchFacesByImage falló:', error);
-    return null;
-  }
-
-  // Excluir la cara recién indexada (el propio reporte) y sin ExternalImageId
-  const candidates = faceMatches.filter((m) => m.ExternalImageId && m.ExternalImageId !== perritoId);
-  if (candidates.length === 0) return null;
-
-  const faceIds = candidates.map((m) => m.FaceId);
-  const oppositeRol = input.rol === 'PERDIDO' ? 'BUSCA_DUEÑO' : 'PERDIDO';
-
-  const { data: existing, error } = await supabase
-    .from('perritos')
-    .select('*, usuario:usuarios(id, nombre, telefono, email)')
-    .in('aws_face_id', faceIds)
-    .eq('rol_publicacion', oppositeRol)
-    .eq('estado', 'ACTIVO')
-    .limit(10);
-
-  if (error || !existing || existing.length === 0) return null;
-
-  const similarityByFace = new Map(candidates.map((m) => [m.FaceId, m.Similarity]));
-  const similarityOf = (p: PerritoConUsuario) => similarityByFace.get(p.aws_face_id ?? '') ?? 0;
-  const records = existing as PerritoConUsuario[];
-
-  // Mejor coincidencia (mayor % de similitud)
-  const best = [...records].sort((a, b) => similarityOf(b) - similarityOf(a))[0];
-  const porcentaje = Math.round(similarityOf(best) * 100) / 100;
-
-  const perdidoId = input.rol === 'PERDIDO' ? perritoId : best.id;
-  const encontradoId = input.rol === 'PERDIDO' ? best.id : perritoId;
-
-  // Registrar el par (ignora si ya existía: ON CONFLICT DO NOTHING)
-  await supabase
-    .from('matches_ia')
-    .upsert(
-      {
-        perrito_perdido_id: perdidoId,
-        perrito_encontrado_id: encontradoId,
-        porcentaje_similitud: porcentaje,
-      },
-      {
-        onConflict: 'perrito_perdido_id, perrito_encontrado_id',
-        ignoreDuplicates: true,
-      },
-    );
-
-  // --- Notificación por email (nunca bloquea la publicación) ---
-  let resultadoNotificacion: NotificacionEstado = {
-    ok: false,
-    enviados: 0,
-    total: 2,
-    detalle: 'Los correos ya habían sido notificados para este par.',
-  };
-  try {
-    const { data: par } = await supabase
-      .from('matches_ia')
-      .select('notificados')
-      .eq('perrito_perdido_id', perdidoId)
-      .eq('perrito_encontrado_id', encontradoId)
-      .maybeSingle();
-
-    if (!par?.notificados) {
-      const { data: pares } = await supabase
-        .from('perritos')
-        .select('*, usuario:usuarios(id, nombre, telefono, email)')
-        .in('id', [perdidoId, encontradoId]);
-
-      const perdido = (pares ?? []).find((p) => p.id === perdidoId) as PerritoConUsuario | undefined;
-      const encontrado = (pares ?? []).find((p) => p.id === encontradoId) as PerritoConUsuario | undefined;
-
-      if (perdido && encontrado) {
-        resultadoNotificacion = await notificarMatch({ perdido, encontrado, porcentajeSimilitud: porcentaje });
-        if (resultadoNotificacion.ok) {
-          await supabase
-            .from('matches_ia')
-            .update({ notificados: true })
-            .eq('perrito_perdido_id', perdidoId)
-            .eq('perrito_encontrado_id', encontradoId);
-        } else {
-          console.warn('Notificación de match falló:', resultadoNotificacion.detalle);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error al notificar el match por email:', error);
-  }
-
-  return { perrito: best, porcentaje_similitud: porcentaje, notificacion: resultadoNotificacion };
-}
-
-/** Limpieza cuando el reporte no se pudo guardar. */
-async function limpiarRecursos(supabase: SupabaseClient, fotoPath: string, faceId: string | null) {
-  await supabase.storage.from(FOTOS_BUCKET).remove([fotoPath]).catch(() => {});
-  if (faceId) await deleteFace(faceId).catch(() => {});
 }

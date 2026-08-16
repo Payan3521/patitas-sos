@@ -15,7 +15,7 @@ export default function PublicarPage() {
       <main className="mx-auto max-w-2xl px-4 pb-24 pt-6">
         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Publicar un reporte</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Cuanto más clara sea la foto del rostro, más rápido la IA encontrará una coincidencia.
+          Cuanto más clara sea la foto de la mascota, más rápido la IA encontrará una coincidencia. Funciona con perros y gatos.
         </p>
         <div className="mt-6">
           <PublicarForm />

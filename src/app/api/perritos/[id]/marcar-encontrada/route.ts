@@ -2,19 +2,26 @@
 // 🐾 PATITAS SOS — POST /api/perritos/[id]/marcar-encontrada
 //
 // Marca un reporte como ENCONTRADA. Verifica antes que quien lo
-// solicita es el publicador del reporte, de una de estas formas:
-//   1. `token`    → firma HMAC que llega en el correo de notificación.
-//   2. `telefono` → teléfono con el que se publicó el reporte.
-//   3. `email`    → correo con el que se publicó el reporte.
+// solicita es el DUEÑO (el publicador del reporte PERDIDO), de una
+// de estas formas:
+//   1. sesión → `Authorization: Bearer <token>`: sesión iniciada
+//               con el mismo correo/auth_uid del publicador.
+//   2. `token` → firma HMAC que llega en el correo de notificación
+//                (que solo se envía al correo del dueño).
 //
-// Al confirmar, el reporte Y TODOS SUS PARES de matches_ia (la misma
-// mascota) pasan a ENCONTRADA y aparecen en la lista "Encontradas".
+// NO se acepta verificación por teléfono/email: el teléfono es
+// público en el reporte y cualquiera podría marcarla.
+//
+// Al confirmar, el reporte (SOLO el del dueño, rol PERDIDO) y todos sus
+// pares de matches_ia (la misma mascota) pasan a ENCONTRADA y aparecen en
+// la lista "Encontradas". El reporte del rescatista (BUSCA_DUEÑO) NO puede
+// marcarla: solo el dueño decide el reencuentro.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { leerSesion } from '@/lib/auth';
 import { verificarTokenEncontrada } from '@/lib/mail';
 import { createServerSupabase } from '@/lib/supabase-server';
-import { normalizarTelefonoColombia } from '@/lib/validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,8 +30,6 @@ const json = (data: unknown, status = 200) => NextResponse.json(data, { status }
 
 interface Body {
   token?: string;
-  telefono?: string;
-  email?: string;
 }
 
 export async function POST(
@@ -57,20 +62,32 @@ export async function POST(
       return json({ ok: false, error: 'Este reporte ya no está disponible.' }, 404);
     }
 
-    // --- Verificación de identidad del publicador ---
+    // --- Solo el dueño puede marcar como encontrada ---
+    // El reporte PERDIDO es del dueño; el BUSCA_DUEÑO es del rescatista.
+    if (perrito.rol_publicacion !== 'PERDIDO') {
+      return json(
+        {
+          ok: false,
+          error:
+            'Solo el dueño de la mascota (quien publicó el reporte de búsqueda) puede marcarla como encontrada.',
+        },
+        403,
+      );
+    }
+
+    // --- Verificación de identidad del dueño: sesión o token del correo ---
+    const sesion = leerSesion(request);
     const token = typeof body.token === 'string' ? body.token : '';
-    const telefono = typeof body.telefono === 'string' ? body.telefono.trim() : '';
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
 
     let autorizado = false;
 
-    if (token) {
+    if (sesion?.email) {
+      const emailCoincide =
+        !!perrito.usuario?.email &&
+        sesion.email.toLowerCase() === perrito.usuario.email.toLowerCase();
+      autorizado = emailCoincide;
+    } else if (token) {
       autorizado = verificarTokenEncontrada(id, token);
-    } else if (telefono) {
-      const normalizado = normalizarTelefonoColombia(telefono);
-      autorizado = !!normalizado && normalizado === perrito.usuario?.telefono;
-    } else if (email) {
-      autorizado = email === (perrito.usuario?.email ?? '').toLowerCase();
     }
 
     if (!autorizado) {
@@ -78,7 +95,7 @@ export async function POST(
         {
           ok: false,
           error:
-            'No pudimos verificar que eres quien publicó este reporte. Ingresa el teléfono o el correo que usaste al publicarlo.',
+            'Solo el dueño puede marcar este reporte como encontrado. Inicia sesión con el correo con el que lo publicaste o abre el enlace del correo de notificación.',
         },
         403,
       );

@@ -26,6 +26,7 @@
 -- ----------------------------------------------------------------------------
 -- 1. BORRAR TODO (tablas, enums, políticas y fotos del bucket)
 -- ----------------------------------------------------------------------------
+drop table if exists public.notificaciones cascade;
 drop table if exists public.matches_ia cascade;
 drop table if exists public.perritos cascade;
 drop table if exists public.usuarios cascade;
@@ -56,11 +57,14 @@ create type public.rol_publicacion as enum ('BUSCA_DUEÑO', 'PERDIDO');
 create type public.estado_perrito as enum ('ACTIVO', 'ENCONTRADA', 'RECONCILIADO');
 
 -- 2.2. Tabla: usuarios
+--      auth_uid = id del usuario en Supabase Auth (login por código).
+--      Quien publica SIEMPRE tiene sesión iniciada.
 create table if not exists public.usuarios (
   id         uuid primary key default gen_random_uuid(),
   nombre     text not null,
   email      text,
   telefono   text not null,
+  auth_uid   uuid unique,
   creado_en  timestamptz not null default now()
 );
 
@@ -101,18 +105,39 @@ create table if not exists public.matches_ia (
 create index if not exists matches_ia_perdido_idx    on public.matches_ia (perrito_perdido_id);
 create index if not exists matches_ia_encontrado_idx on public.matches_ia (perrito_encontrado_id);
 
--- 2.5. Row Level Security (RLS)
+-- 2.5. Tabla: notificaciones (avisos web de coincidencias — no dependen del correo)
+--      Cada parte de un match recibe una fila que apunta a la publicación
+--      de la contraparte (perrito_id) y a su propia publicación (mi_perrito_id).
+create table if not exists public.notificaciones (
+  id                   uuid primary key default gen_random_uuid(),
+  usuario_id           uuid not null references public.usuarios (id) on delete cascade,
+  perrito_id           uuid not null references public.perritos (id) on delete cascade,
+  mi_perrito_id        uuid not null references public.perritos (id) on delete cascade,
+  porcentaje_similitud real,
+  tipo                 text not null default 'MATCH',
+  leida                boolean not null default false,
+  creado_en            timestamptz not null default now(),
+  unique (usuario_id, perrito_id, mi_perrito_id)
+);
+
+create index if not exists notificaciones_usuario_idx on public.notificaciones (usuario_id, creado_en desc);
+
+-- 2.6. Row Level Security (RLS)
 --    La app escribe SIEMPRE desde las API Routes usando la service role key
 --    (que salta la RLS). Estas políticas solo blindan el acceso directo.
-alter table public.usuarios   enable row level security;
-alter table public.perritos   enable row level security;
-alter table public.matches_ia enable row level security;
+alter table public.usuarios       enable row level security;
+alter table public.perritos       enable row level security;
+alter table public.matches_ia     enable row level security;
+alter table public.notificaciones enable row level security;
 
 -- Lectura pública del feed: reportes ACTIVOS y marcados como ENCONTRADA.
 create policy "perritos_lectura_publica" on public.perritos
   for select using (estado in ('ACTIVO', 'ENCONTRADA'));
 
--- 2.6. Storage: bucket público "fotos-perritos"
+-- Las notificaciones NO tienen políticas públicas: solo se leen desde las
+-- API Routes con la service role key (verifican la sesión del usuario).
+
+-- 2.7. Storage: bucket público "fotos-perritos"
 --    (Si el bucket no existe: Storage → New bucket → name: fotos-perritos
 --     → marcar "Public bucket" → Create.)
 create policy "fotos_perritos_lectura_publica" on storage.objects
@@ -123,7 +148,8 @@ create policy "fotos_perritos_lectura_publica" on storage.objects
 -- ----------------------------------------------------------------------------
 select 'usuarios' as tabla, count(*) from public.usuarios
 union all select 'perritos', count(*) from public.perritos
-union all select 'matches_ia', count(*) from public.matches_ia;
+union all select 'matches_ia', count(*) from public.matches_ia
+union all select 'notificaciones', count(*) from public.notificaciones;
 
 select enumlabel from pg_enum e
   join pg_type t on t.oid = e.enumtypid

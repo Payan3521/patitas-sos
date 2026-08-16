@@ -1,0 +1,1 @@
+4. diseño colores de la u, cambios en nombres del identificado (se busca, busca dueño), botones en el header de perdi mi mascota y de encontre una mascota

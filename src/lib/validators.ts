@@ -7,13 +7,13 @@
 // municipio de la lista DANE.
 // ============================================================
 
-import type { RolPublicacion } from './types';
+import type { Especie, RolPublicacion } from './types';
 
 export interface PublicarInput {
   rol: RolPublicacion;
+  especie: Especie;
   nombre: string;
   telefono: string;
-  email: string;
   nombreTemporal: string | null;
   descripcion: string;
   departamento: string;
@@ -54,6 +54,11 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
     return fail('Selecciona una categoría válida: "Perdí a mi mascota" o "Encontré una mascota".');
   }
 
+  const especie = clean(fd.get('especie')) || 'perro';
+  if (especie !== 'perro' && especie !== 'gato') {
+    return fail('Selecciona un tipo de mascota válido (perro o gato).');
+  }
+
   const nombre = clean(fd.get('nombre'));
   if (nombre.length < 2 || nombre.length > 120) {
     return fail('Ingresa tu nombre (mínimo 2 caracteres).');
@@ -65,13 +70,10 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
   }
 
   const emailRaw = clean(fd.get('email'));
-  if (!emailRaw) {
-    return fail('El email es obligatorio: es donde recibirás la notificación si encontramos a tu mascota.');
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 254) {
+  if (emailRaw && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 254)) {
     return fail('El correo electrónico no es válido.');
   }
-  const email = emailRaw.toLowerCase();
+  // El email ya no viene del formulario: se toma de la sesión del usuario.
 
   const departamento = clean(fd.get('departamento'));
   if (!departamento || departamento.length > 100) {
@@ -102,9 +104,9 @@ export function validatePublicarInput(fd: FormData): Result<PublicarInput> {
     ok: true,
     data: {
       rol: rol as RolPublicacion,
+      especie: especie as Especie,
       nombre,
       telefono,
-      email,
       nombreTemporal,
       descripcion,
       departamento,

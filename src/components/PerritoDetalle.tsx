@@ -1,32 +1,35 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { formatPhone, timeAgo, whatsappLink } from '@/lib/format';
-import type { Perrito } from '@/lib/types';
+import { textosEspecie } from '@/lib/especie';
+import type { MatchedPublication, Perrito } from '@/lib/types';
 
 interface Props {
   perrito: Perrito;
   token?: string;
+  matches?: MatchedPublication[];
 }
-
-const inputCls =
-  'w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200';
 
 /**
  * Página de detalle de un reporte: foto grande, descripción,
  * zona, datos de contacto y botones WhatsApp / llamar.
  *
- * Si el visitante es quien publicó el reporte (verificado por
- * token del correo, teléfono o email), puede marcarlo como
- * ENCONTRADA. El reporte y sus pares de la IA pasan a la lista
- * "Encontradas" del home.
+ * Solo quien publicó el reporte PERDIDO puede marcarlo como ENCONTRADA:
+ * verificado por su sesión iniciada o por el token firmado del correo
+ * de notificación (que solo le llega al dueño). Cualquier otro visitante
+ * no ve esa sección.
+ *
+ * Si además hay match de la IA, solo las partes logueadas ven la
+ * referencia a la publicación de la contraparte.
  */
-export function PerritoDetalle({ perrito, token }: Props) {
+export function PerritoDetalle({ perrito, token, matches = [] }: Props) {
   const router = useRouter();
-  const [verificacion, setVerificacion] = useState('');
+  const { session } = useAuth();
   const [verificando, setVerificando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState(false);
@@ -37,7 +40,10 @@ export function PerritoDetalle({ perrito, token }: Props) {
   const telefono = usuario.telefono ?? '';
   const nombre =
     perrito.nombre_temporal ||
-    (esPerdido ? 'Mi mascota' : 'Perrito rescatado');
+    textosEspecie(perrito.especie)[esPerdido ? 'perdido' : 'rescatado'];
+
+  const sesionEmail = (session?.email ?? '').toLowerCase();
+  const esParte = !!sesionEmail && sesionEmail === (usuario.email ?? '').toLowerCase();
 
   const badge = esEncontrada
     ? { text: '✅ ENCONTRADA', className: 'bg-emerald-600 text-white' }
@@ -45,13 +51,15 @@ export function PerritoDetalle({ perrito, token }: Props) {
       ? { text: '🐾 SE BUSCA', className: 'bg-rose-600 text-white' }
       : { text: '🏠 BUSCA SU DUEÑO', className: 'bg-sky-600 text-white' };
 
-  async function marcarEncontrada(payload: { token?: string; telefono?: string; email?: string }) {
+  async function marcarEncontrada(payload: { token?: string }) {
     setVerificando(true);
     setError('');
     try {
       const res = await fetch(`/api/perritos/${perrito.id}/marcar-encontrada`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -59,7 +67,6 @@ export function PerritoDetalle({ perrito, token }: Props) {
         throw new Error(data.error ?? 'No pudimos marcar el reporte como encontrado.');
       }
       setExito(true);
-      setVerificacion('');
       router.refresh();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -67,17 +74,6 @@ export function PerritoDetalle({ perrito, token }: Props) {
     } finally {
       setVerificando(false);
     }
-  }
-
-  async function onSubmitVerificacion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const dato = verificacion.trim();
-    if (!dato) {
-      setError('Ingresa el teléfono o el correo con el que publicaste este reporte.');
-      return;
-    }
-    if (dato.includes('@')) await marcarEncontrada({ email: dato });
-    else await marcarEncontrada({ telefono: dato });
   }
 
   return (
@@ -89,6 +85,55 @@ export function PerritoDetalle({ perrito, token }: Props) {
           <p className="mt-1 text-sm text-emerald-700">
             Este reporte y el de la persona que la encontró ya aparecen en la lista de «Encontradas».
           </p>
+        </div>
+      )}
+
+      {/* Referencia al match: solo la ven las partes (logueadas) */}
+      {esParte && matches.length > 0 && (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-wide text-amber-700">
+            🤝 Coincidencia de la IA
+          </p>
+          <p className="mt-1 text-sm font-medium text-amber-900">
+            La IA encontró {matches.length === 1 ? 'esta publicación' : 'estas publicaciones'} con la
+            misma mascota:
+          </p>
+          <div className="mt-3 space-y-2">
+            {matches.map((match) => {
+              const contra = match.contraparte;
+              const nombreContra =
+                contra.nombre_temporal ||
+                textosEspecie(contra.especie)[contra.rol_publicacion === 'PERDIDO' ? 'perdido' : 'rescatado'];
+              return (
+                <Link
+                  key={contra.id}
+                  href={`/perrito/${contra.id}`}
+                  className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-white p-3 transition hover:bg-amber-100"
+                >
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-neutral-200">
+                    <Image
+                      src={contra.foto_url}
+                      alt={nombreContra}
+                      fill
+                      sizes="56px"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-extrabold text-neutral-900">{nombreContra}</p>
+                    <p className="text-xs text-neutral-500">
+                      {contra.departamento} · {contra.ciudad}
+                    </p>
+                    <p className="text-xs font-bold text-amber-700">
+                      Similaridad: {match.porcentaje_similitud.toFixed(1)}%
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs font-bold text-amber-600">Ver →</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -151,48 +196,52 @@ export function PerritoDetalle({ perrito, token }: Props) {
         </div>
       </div>
 
-      {/* Marcar como encontrada */}
-      {!esEncontrada && !exito && (
+      {/* Marcar como encontrada — SOLO el dueño: sesión iniciada o token del correo */}
+      {!esEncontrada && !exito && esPerdido && (esParte || token) && (
         <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-black uppercase tracking-wide text-neutral-500">
-            {esPerdido ? '¿Es tu mascota? Márcala como encontrada' : '¿Ya encontró a su dueño? Márcala como encontrada'}
+            ¿Es tu mascota? Márcala como encontrada
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
             Solo quien publicó este reporte puede marcarlo. Si vienes del correo de notificación, tu
             verificación ya está lista.
           </p>
 
-          {token ? (
-            <button
-              type="button"
-              disabled={verificando}
-              onClick={() => marcarEncontrada({ token })}
-              className="mt-4 w-full rounded-full bg-emerald-600 py-3.5 text-base font-black text-white shadow transition hover:bg-emerald-700 disabled:opacity-60"
-            >
-              {verificando ? 'Verificando…' : '✅ Confirmar: sí, es mi mascota — marcar como encontrada'}
-            </button>
-          ) : (
-            <form onSubmit={onSubmitVerificacion} className="mt-3 space-y-2">
-              <input
-                value={verificacion}
-                onChange={(e) => setVerificacion(e.target.value)}
-                placeholder="Teléfono o correo usado al publicar (Ej: 300 123 4567)"
-                className={inputCls}
-              />
-              <button
-                type="submit"
-                disabled={verificando}
-                className="w-full rounded-full bg-emerald-600 py-3 text-sm font-black text-white shadow transition hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {verificando ? 'Verificando…' : '✅ Marcar como encontrada'}
-              </button>
-            </form>
-          )}
+          <button
+            type="button"
+            disabled={verificando}
+            onClick={() => marcarEncontrada(token ? { token } : {})}
+            className="mt-4 w-full rounded-full bg-emerald-600 py-3.5 text-base font-black text-white shadow transition hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {verificando ? 'Verificando…' : '✅ Confirmar: sí, es mi mascota — marcar como encontrada'}
+          </button>
 
           {error && (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
               ⚠️ {error}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Reporte del rescatista (BUSCA_DUEÑO): la confirmación es del dueño */}
+      {!esEncontrada && !exito && !esPerdido && (
+        <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-black uppercase tracking-wide text-neutral-500">
+            ¿Reconoces a esta mascota?
+          </h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            Solo la persona que publicó su pérdida puede marcarla como encontrada, desde su
+            reporte o desde el enlace de su correo. Si tú perdiste a esta mascota, publica un
+            reporte de búsqueda con su foto y la IA los conectará.
+          </p>
+          {!sesionEmail && (
+            <Link
+              href="/iniciar-sesion"
+              className="mt-4 inline-block rounded-full bg-amber-500 px-6 py-2.5 text-sm font-black text-white shadow transition hover:bg-amber-600"
+            >
+              🔐 Iniciar sesión y publicar la pérdida
+            </Link>
           )}
         </div>
       )}

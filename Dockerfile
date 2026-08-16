@@ -4,9 +4,7 @@
 # Build:
 #   docker compose up --build -d
 # o bien:
-#   docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=... \
-#                --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
-#                -t patitas-sos .
+#   docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=... -t patitas-sos .
 # ============================================================
 
 # ---------- Etapa base ----------
@@ -17,7 +15,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # ---------- Etapa 1: instalar dependencias ----------
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci --frozen-lockfile
+# Usa la caché de npm del host (contexto adicional `npm_cache`) para no
+# descargar todo desde el registry: red inestable (ECONNRESET) tolerada.
+COPY --from=npm_cache /_cacache /root/.npm/_cacache
+RUN npm ci --frozen-lockfile \
+  --prefer-offline \
+  --fetch-retries=5 \
+  --fetch-retry-mintimeout=20000 \
+  --fetch-retry-maxtimeout=120000 \
+  --fetch-timeout=600000
 
 # ---------- Etapa 2: compilar la app ----------
 FROM base AS builder
@@ -27,9 +33,7 @@ COPY . .
 # Las variables NEXT_PUBLIC_* se incrustan en el bundle del cliente
 # durante el build (las demás se leen en runtime desde el entorno).
 ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 RUN npm run build
 

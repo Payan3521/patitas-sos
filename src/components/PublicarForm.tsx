@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
+import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 import { MatchModal } from '@/components/MatchModal';
 import { municipiosDe, DEPARTAMENTOS_NOMBRES } from '@/lib/colombia';
 import { compressImageToJpeg, formatBytes } from '@/lib/image-utils';
@@ -11,9 +12,9 @@ import type { MatchInfo, PublicarResponse, RolPublicacion } from '@/lib/types';
 type Tab = RolPublicacion;
 
 const INITIAL_FORM = {
+  especie: 'perro',
   nombre: '',
   telefono: '',
-  email: '',
   nombreTemporal: '',
   descripcion: '',
   departamento: '',
@@ -26,13 +27,60 @@ const inputCls =
 
 /**
  * Formulario unificado para Dueños ("PERDIDO") y Rescatistas
- * ("BUSCA_DUEÑO"). Comprime la foto a ≤ 200 KB en el cliente y la
- * envía a /api/publicar-perrito. Si la IA encuentra una coincidencia,
- * congela la pantalla con el modal de éxito gigante.
+ * ("BUSCA_DUEÑO"). Requiere sesión iniciada: si no hay sesión se muestra
+ * una invitación a /iniciar-sesion. El email se toma de la sesión (bloqueado);
+ * el resto de datos de contacto los llena la persona. Comprime la foto a
+ * ≤ 200 KB en el cliente y la envía a /api/publicar-perrito con el token.
  */
 export function PublicarForm() {
+  const { session, loading, email } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center">
+        <div className="text-4xl">⏳</div>
+        <p className="mt-2 text-sm font-semibold text-neutral-500">Cargando tu sesión…</p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center">
+        <div className="text-5xl">🔐</div>
+        <h2 className="mt-2 text-xl font-black text-neutral-900">Inicia sesión para publicar</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-neutral-600">
+          Publicar requiere estar identificado (email y contraseña). Así
+          guardamos tus publicaciones y te avisamos por web y correo si hay una coincidencia.
+        </p>
+        <Link
+          href="/iniciar-sesion"
+          className="mt-5 inline-block rounded-full bg-amber-500 px-8 py-3 text-base font-black text-white shadow-lg transition hover:bg-amber-600"
+        >
+          🔐 Iniciar sesión
+        </Link>
+      </div>
+    );
+  }
+
+  return <FormularioPublicar perfil={{ email: email ?? '', nombre: session.nombre ?? '', telefono: session.telefono ?? '' }} />;
+}
+
+function FormularioPublicar({ perfil }: { perfil: { email: string; nombre: string; telefono: string } }) {
+  const { session } = useAuth();
+
+  /** Teléfono del perfil (guardado como +573019298995) → dígitos de 10 sin +57. */
+  const telefonoDePerfil = () => {
+    const digits = perfil.telefono.replace(/\D/g, '');
+    if (digits.startsWith('57') && digits.length > 10) return digits.slice(2);
+    if (digits.startsWith('0') && digits.length > 10) return digits.slice(1);
+    return digits.slice(0, 10);
+  };
+
+  const formInicial = { ...INITIAL_FORM, nombre: perfil.nombre, telefono: telefonoDePerfil() };
+
   const [tab, setTab] = useState<Tab>('PERDIDO');
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [form, setForm] = useState(formInicial);
 
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState('');
@@ -43,6 +91,7 @@ export function PublicarForm() {
   const [error, setError] = useState('');
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const [success, setSuccess] = useState(false);
+  const [perritoId, setPerritoId] = useState('');
 
   // Comprime la foto elegida a ≤ 200 KB antes de enviarla
   const handleFile = useCallback(async (file: File | null) => {
@@ -85,7 +134,7 @@ export function PublicarForm() {
   };
 
   const resetForm = () => {
-    setForm(INITIAL_FORM);
+    setForm(formInicial);
     setFoto(null);
     setFotoPreview('');
     setFotoInfo('');
@@ -97,7 +146,7 @@ export function PublicarForm() {
     event.preventDefault();
 
     if (!foto) {
-      setError('Sube o toma una foto del rostro de la mascota.');
+      setError('Sube o toma una foto clara de la mascota.');
       return;
     }
     if (submitting || compressing) return;
@@ -108,9 +157,9 @@ export function PublicarForm() {
     try {
       const formData = new FormData();
       formData.append('rol', tab);
+      formData.append('especie', form.especie);
       formData.append('nombre', form.nombre);
       formData.append('telefono', `+57${form.telefono}`);
-      formData.append('email', form.email);
       formData.append('nombre_temporal', form.nombreTemporal);
       formData.append('descripcion', form.descripcion);
       formData.append('departamento', form.departamento);
@@ -118,12 +167,18 @@ export function PublicarForm() {
       formData.append('barrio_zona', form.barrioZona);
       formData.append('foto', foto);
 
-      const res = await fetch('/api/publicar-perrito', { method: 'POST', body: formData });
+      const res = await fetch('/api/publicar-perrito', {
+        method: 'POST',
+        headers: accessTokenHeader(session),
+        body: formData,
+      });
       const data: PublicarResponse = await res.json();
 
       if (!res.ok || !data.ok) {
         throw new Error(data.error ?? 'Ocurrió un error al publicar. Intenta de nuevo.');
       }
+
+      setPerritoId(data.perritoId ?? '');
 
       if (data.match && data.matchInfo) {
         // 🎉 La IA encontró una coincidencia → congelar pantalla con el modal
@@ -194,9 +249,9 @@ export function PublicarForm() {
           ) : (
             <div>
               <div className="text-5xl">📸</div>
-              <p className="mt-2 text-sm font-bold text-neutral-800">Foto del rostro de la mascota</p>
+              <p className="mt-2 text-sm font-bold text-neutral-800">Foto de la mascota</p>
               <p className="mt-1 text-xs text-neutral-500">
-                De frente y con buena luz para que la IA encuentre coincidencias.
+                De frente y con buena luz para que la IA encuentre coincidencias. En perros y gatos también funciona.
               </p>
 
               <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -262,23 +317,44 @@ export function PublicarForm() {
               </div>
             </Field>
           </div>
-          <Field label="Email (obligatorio) *">
-            <input
-              type="email"
-              value={form.email}
-              onChange={setField('email')}
-              placeholder="Aquí recibirás el aviso si encontramos a tu mascota"
-              className={inputCls}
-              required
-            />
+          <Field label="Email (de tu sesión)">
+            <div className="flex items-center overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+              <span className="w-full truncate px-3.5 py-2.5 text-sm font-semibold text-neutral-600">
+                {perfil.email}
+              </span>
+              <Link
+                href="/iniciar-sesion"
+                className="shrink-0 border-l border-neutral-200 px-3 py-2.5 text-xs font-bold text-amber-600 underline hover:bg-white"
+              >
+                Cambiar
+              </Link>
+            </div>
           </Field>
         </div>
 
         {/* ---- Datos del perrito ---- */}
         <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5">
           <h3 className="text-sm font-black uppercase tracking-wide text-neutral-500">
-            Datos del perrito
+            Datos de la mascota
           </h3>
+          <Field label="Tipo de mascota *">
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-neutral-300 bg-white p-1.5">
+              {(['perro', 'gato'] as const).map((esp) => (
+                <button
+                  key={esp}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, especie: esp }))}
+                  className={`rounded-lg px-2 py-2 text-sm font-bold transition ${
+                    form.especie === esp
+                      ? 'bg-amber-500 text-white shadow'
+                      : 'text-neutral-500 hover:bg-neutral-100'
+                  }`}
+                >
+                  {esp === 'perro' ? '🐶 Perro' : '🐱 Gato'}
+                </button>
+              ))}
+            </div>
+          </Field>
           <Field label={tab === 'PERDIDO' ? 'Nombre de tu mascota (si lo sabes)' : 'Nombre temporal (opcional)'}>
             <input
               value={form.nombreTemporal}
@@ -374,7 +450,7 @@ export function PublicarForm() {
           <h3 className="mt-2 text-xl font-black text-emerald-800">¡Reporte publicado!</h3>
           <p className="mt-1 text-sm text-emerald-700">
             Ya está visible en el feed. La IA no encontró coincidencias por ahora; si aparece una
-            nueva publicación con la misma cara, te escribiremos a tu correo.
+            nueva publicación con una mascota parecida, te escribiremos a tu correo.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
             <Link
@@ -382,6 +458,12 @@ export function PublicarForm() {
               className="rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
             >
               Ver el feed
+            </Link>
+            <Link
+              href="/mis-publicaciones"
+              className="rounded-full border border-emerald-600 px-6 py-2.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              📋 Mis publicaciones
             </Link>
             <button
               type="button"

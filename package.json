@@ -2,14 +2,15 @@
   "name": "patitas-sos",
   "version": "1.0.0",
   "private": true,
-  "description": "Plataforma colombiana que reconecta mascotas perdidas con sus familias usando IA (AWS Rekognition) y notificaciones por correo (Resend).",
+  "description": "Plataforma colombiana que reconecta mascotas perdidas con sus familias usando IA (Gemini Flash) y notificaciones por correo (Brevo).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "limpiar": "node scripts/limpiar.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-rekognition": "^3.750.0",
+    "@google/genai": "^2.17.1",
     "@supabase/supabase-js": "^2.49.1",
     "next": "^15.3.3",
     "react": "^19.1.0",
