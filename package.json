@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "limpiar": "node scripts/limpiar.mjs"
+    "limpiar": "node scripts/limpiar.mjs",
+    "smoke": "node scripts/smoke-comparar-todos.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.17.1",
