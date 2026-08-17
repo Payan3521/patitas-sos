@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 · Chat — SOS PETS × EAM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css?v=27">
+</head>
+<body>
+
+<div class="topstrip">
+  <div class="container">
+    <span>Institución Universitaria EAM — Armenia, Quindío</span>
+    <span class="right">Proyecto académico · Vigilada Mineducación</span>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container head-inner">
+    <a class="brand" href="01-feed.html">
+      <img class="brand-logo" src="../img/sos-pets.png" alt="SOS PETS">
+      <span class="brand-txt"><strong>SOS PETS</strong><small>Red de mascotas · I.U. EAM</small></span>
+    </a>
+    <nav class="nav">
+      <a class="nav-link" href="01-feed.html">Inicio</a>
+      <a class="nav-link" href="03-publicar.html">Publicar</a>
+      <a class="nav-link" href="08-notificaciones.html">Notificaciones <span class="pill">3</span></a>
+      <a class="nav-link" href="09-mis-publicaciones.html">Mis avisos</a>
+      <a class="nav-link active" href="11-chat.html">Chat <span class="pill">2</span></a>
+      <a class="btn btn-primary btn-sm" href="07-login.html">Entrar</a>
+    </nav>
+    <details class="mnav">
+      <summary><span></span><span></span><span></span></summary>
+      <div class="mnav-panel">
+        <a href="01-feed.html">Inicio</a>
+        <a href="03-publicar.html">Publicar</a>
+        <a href="08-notificaciones.html">Notificaciones (3)</a>
+        <a href="09-mis-publicaciones.html">Mis avisos</a>
+        <a href="11-chat.html">Chat (2)</a>
+        <a class="btn btn-primary" href="07-login.html">Entrar</a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.4rem">
+  <div class="section-head">
+    <div>
+      <h1 style="font-size:clamp(1.6rem,3vw,2.1rem); margin-bottom:.2rem">Mensajes</h1>
+      <p class="sub">Conversaciones verificadas de tu red de búsqueda.</p>
+    </div>
+    <span class="badge badge-eam"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Vecinos verificados</span>
+  </div>
+
+  <div class="chat-layout">
+    <aside class="threads">
+      <div style="padding:1rem 1.2rem; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.6rem">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--muted)"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+        <input class="input" placeholder="Buscar conversación…">
+      </div>
+
+      <a class="list-item" href="#camilo" style="text-decoration:none; background:var(--bg)">
+        <span class="avatar avatar-grad-c">CR</span>
+        <div class="grow">
+          <h4>Camilo Restrepo <span class="badge badge-eam" style="margin-left:.2rem; font-size:.62rem">92% match</span></h4>
+          <p>Vi una perra dorada solita atrás de la cancha…</p>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:.3rem">
+          <span class="when">hace 5 min</span>
+          <span class="unread-dot"></span>
+        </div>
+      </a>
+
+      <a class="list-item" href="#" style="text-decoration:none">
+        <span class="avatar avatar-grad-d">MG</span>
+        <div class="grow">
+          <h4>Marcela Giraldo</h4>
+          <p>Hola, vi tu aviso de Michi en el Centro. Yo trabajo…</p>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:.3rem">
+          <span class="when">ayer</span>
+          <span class="unread-dot"></span>
+        </div>
+      </a>
+
+      <a class="list-item" href="#" style="text-decoration:none">
+        <span class="avatar avatar-grad-b">DA</span>
+        <div class="grow">
+          <h4>Diego Arango</h4>
+          <p>Encontré a Tobby en Río Verde, ¿conoces a su dueño?</p>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:.3rem">
+          <span class="when">hace 3 días</span>
+        </div>
+      </a>
+
+      <a class="list-item" href="#" style="text-decoration:none; opacity:.7">
+        <span class="avatar avatar-grad-a">AT</span>
+        <div class="grow">
+          <h4>Aura Torres</h4>
+          <p>Listo, quedó activado el aviso en tu barrio</p>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:.3rem">
+          <span class="when">hace 1 semana</span>
+        </div>
+      </a>
+    </aside>
+
+    <section class="conversation" id="camilo">
+      <div class="conv-head">
+        <span class="avatar avatar-grad-c">CR</span>
+        <div class="grow">
+          <b>Camilo Restrepo</b>
+          <div style="font-size:.78rem; color:var(--ok); display:flex; align-items:center; gap:.3rem">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>
+            Verificado · Vecino de El Edén
+          </div>
+        </div>
+        <a class="btn btn-whatsapp btn-sm" href="https://wa.me/573112345678">WhatsApp</a>
+      </div>
+
+      <div class="conv-body">
+        <div class="msg other">Hola Valentina! Soy Camilo, vi tu aviso de Luna en la cartelera del barrio.<time>hace 6 min</time></div>
+        <div class="msg other">Hace una hora vi una perra dorada, con una correa azul, solita detrás de la cancha del Edén. Se veía asustada y no se dejó acercar.<time>hace 6 min</time></div>
+        <div class="msg me">¡Camilo, gracias! Sí, es ella: la correa azul es la que le pusimos el mismo día.<time>hace 4 min</time></div>
+        <div class="msg me">¿Puedes decirme exactamente a qué hora la viste? Voy para allá con su comida favorita, tal vez se acerque.<time>hace 4 min</time></div>
+        <div class="msg other">Claro, fue como a las 5:20. Si quieres, te acompaño y me quedo con el celular por si aparece por otro lado.<time>hace 2 min</time></div>
+        <div class="msg other typing"><i></i><i></i><i></i><time>escribiendo…</time></div>
+      </div>
+
+      <div class="conv-input">
+        <button class="icon-btn" aria-label="Adjuntar foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4.5 17 5-4 4 3 3-2 3 3"/></svg></button>
+        <input class="input" placeholder="Escribe un mensaje…">
+        <button class="icon-btn" style="background:linear-gradient(135deg,var(--blue),var(--cyan)); border:none; color:#fff" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container foot-grid">
+    <div class="foot-brand">
+      <img class="foot-logo" src="../img/sos-pets.png" alt="SOS PETS">
+      <p>SOS PETS es un proyecto académico de la Institución Universitaria EAM en Armenia (Quindío): une a los vecinos para que las mascotas perdidas vuelvan a casa.</p>
+      <div class="brand-mark-row"><img class="foot-mark" src="../assets/eam-logo.svg" alt="Institución Universitaria EAM"><img class="foot-mark" src="../img/innlab.png" alt="Grupo de investigación InnLab"></div>
+    </div>
+    <div class="foot-col">
+      <h4>La app</h4>
+      <a href="01-feed.html">Avisos cerca de ti</a>
+      <a href="03-publicar.html">Publicar reporte</a>
+      <a href="12-aviso-testigo.html">Soy testigo</a>
+      <a href="11-chat.html">Chat con vecinos</a>
+    </div>
+    <div class="foot-col">
+      <h4>Ayuda</h4>
+      <a href="05-match-modal.html">¿Cómo funciona el match?</a>
+      <a href="07-login.html">Mi cuenta</a>
+      <a href="10-consentimiento.html">Privacidad y datos</a>
+      <a href="#">Consejos para la búsqueda</a>
+    </div>
+    <div class="foot-col">
+      <h4>Institucional</h4>
+      <a href="#">Institución Universitaria EAM</a>
+      <a href="#">Vigilada Mineducación</a>
+      <a href="#">Proyectos de aula</a>
+      <a href="#">Contacto</a>
+    </div>
+  </div>
+  <div class="container foot-bottom">
+    <span>© 2026 SOS PETS · I.U. EAM — Mockup de diseño (HTML + CSS puro).</span>
+    <span>Hecho con amor en Armenia, Quindío.</span>
+  </div>
+</footer>
+
+</body>
+</html>

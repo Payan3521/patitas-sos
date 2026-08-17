@@ -10,7 +10,29 @@ coincidencia cuando **tú lo autorizas expresamente** (consentimiento registrado
 
 Aplicación **monolítica** (Frontend + API Routes en un solo proyecto Next.js), diseñada
 mobile-first porque la gente estará en la calle buscando desde su teléfono, y lista para
-desplegar en minutos con Docker.
+desplegar en minutos en **Vercel** (solo el repo) o con **Docker**.
+
+---
+
+## ✨ Funcionalidades
+
+- 🔍 **Feed público** con 4 categorías (Perdí / Encontré / En adopción / Encuentro de
+  mascota muerta), filtros DANE (departamento → municipio → barrio) y scroll infinito.
+- 📝 **Publicación con IA instantánea**: al publicar, la app compara la foto con
+  **TODOS los reportes** del rol opuesto de la misma especie (hasta 300, priorizando
+  tu ciudad) usando Gemini Flash; el match típico aparece en **3-8 s** (modal 🎉 vía
+  polling a `/api/matches-para`, hasta 90 s) y la publicación nunca espera a la IA.
+- 🔐 **Login propio** (email + contraseña, scrypt, cookie httpOnly sin librerías).
+- 🔔 **Notificaciones web** (bandeja con contador) + **correos Brevo** a ambas partes
+  del match.
+- 🤝 **Consentimiento de contacto**: los datos son privados hasta que cada parte
+  autoriza expresamente compartirlos (enlaces firmados, 72 h).
+- 💬 **Chat privado** entre las dos partes de un match (bandeja, hilos, realtime).
+- 👀 **Avisos de testigos** "Vi esta mascota" (mini-chat con presets, anti-spam).
+- 🕐 **Revisión diaria (cron)**: cada día re-cruza lo pendiente dentro del presupuesto
+  de llamadas — ningún match se pierde jamás.
+- 🧾 **Política de privacidad** pública + consentimiento versionado en BD.
+- 🧹 **`npm run limpiar`**: reset total de datos de prueba (tablas + fotos del bucket).
 
 ---
 
@@ -18,14 +40,17 @@ desplegar en minutos con Docker.
 
 | Capa | Tecnología |
 |---|---|
-| Frontend + Backend | **Next.js 15** (App Router) + TypeScript |
+| Frontend + Backend | **Next.js 15** (App Router) + React 19 + TypeScript (`output: standalone`) |
 | Estilos | **Tailwind CSS 4** (mobile-first) |
-| Base de datos | **Supabase** (PostgreSQL) |
+| Base de datos | **Supabase** (PostgreSQL + Storage + Realtime *broadcast* para el chat) |
 | Autenticación | **Login propio** — email + contraseña (hash scrypt, cookie httpOnly, sin rate limiting) |
 | Almacenamiento | **Supabase Storage** (bucket público `fotos-perritos`) |
-| IA (reconocimiento de mascotas) | **Gemini** (Google GenAI SDK, **Interactions API** — `gemini-3.5-flash`, configurable por env; compara fotos en vez de "caras") |
+| IA (reconocimiento de mascotas) | **Gemini** (`@google/genai`, **Interactions API** — `gemini-3.5-flash` por default, configurable por env; compara fotos en vez de "caras") |
 | Notificaciones por correo | **Brevo** (API HTTP — 300 correos/día gratis, sin dominio; alternativa: Resend) |
-| Despliegue | **Docker** (multi-stage + docker-compose) |
+| Despliegue | **Vercel** (solo el repo, sin backend/DB propios) o **Docker** (multi-stage + docker-compose, Node 22) |
+
+> 🚀 Guía de despliegue completa (variables, Supabase, cron, Vercel, checklist):
+> **[`docs/DEPLOY.md`](docs/DEPLOY.md)** · Costos: **[`docs/costos.md`](docs/costos.md)**
 
 ---
 
@@ -56,7 +81,10 @@ desplegar en minutos con Docker.
 │       ├── 008_chat.sql                # 💬 Chat: tablas conversaciones + mensajes
     │       ├── 009_avistamientos.sql       # 👀 Avisos de testigos: avistamientos + mensajes_aviso
     │       └── 010_avisos-con-cuenta.sql   # 👀 Cuenta obligatoria: usuario_id + leida_avisador
-    └── src/
+├── docs/
+│   ├── DEPLOY.md                  # 🚀 Guía de despliegue completa (Vercel + Supabase)
+│   └── costos.md                  # 💰 Costos de la IA y escenarios reales
+└── src/
     ├── app/
     │   ├── layout.tsx             # Layout raíz (metadatos, AuthProvider)
     │   ├── globals.css            # Estilos globales (Tailwind)
@@ -102,6 +130,7 @@ desplegar en minutos con Docker.
     │       ├── avistamientos/route.ts             # POST: crear aviso "Vi esta mascota" (exige sesión, anti-spam)
     │       ├── avistamientos/[id]/route.ts        # GET: hilo del aviso; POST: mensaje (1er mensaje del dueño = preset)
     │       ├── mis-avisos/route.ts                # GET: hilos "Vi esta mascota" que INICIÉ (solo sesión)
+    │       ├── matches-para/route.ts              # GET: poll del match en background tras publicar
     │       ├── perritos/route.ts                  # GET: feed paginado y filtrado
     │       ├── perritos/[id]/route.ts             # GET: detalle de un reporte
     │       ├── perritos/[id]/avisos/route.ts      # POST: activar/desactivar avisos (botón 🔕 del dueño)
@@ -279,11 +308,16 @@ el enum con 3 valores).
    > cuenta, prueba el más reciente en https://aistudio.google.com/apikey.
 
 3. **Búsqueda por lotes (cómo funciona la IA)**: al publicar un reporte, la app:
-   - Toma hasta **12 candidatos** del rol opuesto (`GEMINI_MAX_CANDIDATOS`),
-     priorizando misma ciudad → departamento → resto del país, más recientes
-     (excluye al propio reporte y los del mismo usuario).
-   - Compara en **lotes de 4 en paralelo** (`GEMINI_LOTE_PARALELO`) para respetar el
-     límite de peticiones por minuto del free tier, con **1 reintento** por fallo.
+   - Toma **TODOS los candidatos** del rol opuesto y de la **misma especie** (hasta
+     **300**, `GEMINI_MAX_CANDIDATOS_PUBLICACION`; un perro nunca se compara contra
+     gatos), priorizando misma ciudad → departamento → resto del país, más recientes
+     (excluye al propio reporte y los del mismo usuario). El match típico (tu ciudad)
+     sale en la primera ronda: **modal 🎉 en 3-8 s**.
+   - El match corre **en background**: la publicación responde al instante (~3 s) y
+     un polling del cliente (`GET /api/matches-para`, hasta ~90 s) recoge el resultado
+     para mostrar el modal 🎉; si no llega, seguirá por 🔔/correo y el cron.
+   - Compara en **lotes de 16 en paralelo** (`GEMINI_LOTE_PARALELO`) con **1 reintento**
+     por fallo: un escaneo completo de 300 candidatos toma ~1 min como máximo.
    - Guarda cada par en la tabla `comparaciones` (**dedupe**: un par solo se compara
      una vez, aunque el cron lo re-cruce al día siguiente).
    - Pide a Gemini un dictamen JSON `{es_mismo, similitud, razon}` con **esquema
@@ -291,19 +325,22 @@ el enum con 3 valores).
      **≥ 80** (`GEMINI_MATCH_THRESHOLD`).
    - Si una comparación falla (foto bloqueada por la política de Google, error de
      red…) **no se rompe nada**: ese candidato se omite y el reporte queda guardado.
-   - Tope de consumo: **200 llamadas por ejecución** (`GEMINI_LIMITE_DIARIO`).
+   - Tope de consumo: **1.500 llamadas por día** (`GEMINI_LIMITE_DIARIO`).
 4. **Revisión diaria** (opcional pero recomendada): programa el cron de la migración 005
    (pg_cron → `POST /api/revisar-coincidencias` con header `x-cron-secret: CRON_SECRET`).
-   Cada día re-cruza los reportes ACTIVOS de los últimos **7 días**
-   (`GEMINI_DIAS_REVISION`, hasta 40 reportes por ejecución) contra los candidatos que
-   aún no se compararon: **ningún match se pierde** aunque haya cientos de publicaciones.
+   Cada día re-cruza los reportes ACTIVOS de los últimos **14 días**
+   (`GEMINI_DIAS_REVISION`, hasta 80 reportes por ejecución, dentro del mismo
+   presupuesto de 1.500 llamadas/día) contra los candidatos que aún no se compararon:
+   **ningún match se pierde** aunque se supere el tope de 300 (puesto 500 incluido).
 5. La publicación **nunca falla por la IA**: si Gemini no responde, el reporte queda
    guardado igual y la revisión diaria lo intenta después.
 
-> 💰 El free tier de Google permite usar los modelos Flash con un límite diario sin
-> tarjeta; el de 12 comparaciones por publicación alcanza para decenas de publicaciones
-> al día (todo el ajuste fino está en `src/lib/constants.ts`). Precios por modelo,
-> factura mensual simulada en USD/COP y escenarios de crecimiento en
+> 💰 Costo realista: **US$0,0024 por comparación** (2 fotos, 3.5 Flash) → publicar con
+> 300 candidatos ≈ US$0,72; con ~100 ≈ US$0,24. Un ritmo de 1-3 publicaciones/día
+> sale por **US$7-22/mes** (ver [`docs/costos.md`](docs/costos.md)); con
+> `gemini-3.1-flash-lite` sería ~5 veces menos. Todo el ajuste fino está en
+> `src/lib/constants.ts`. Precios por modelo, factura mensual simulada en USD/COP y
+> escenarios de crecimiento en
 > [`docs/costos.md`](docs/costos.md).
 
 ---
@@ -319,6 +356,10 @@ npm run dev        # → http://localhost:3000
 
 ## 🐳 4. Producción con Docker
 
+> 💡 ¿Vas a desplegar el proyecto definitivo? Usa la guía completa:
+> **[`docs/DEPLOY.md`](docs/DEPLOY.md)** (variables con dónde obtenerlas, Supabase,
+> cron, Vercel y checklist). Aquí el resumen rápido:
+
 ```bash
 docker compose --env-file .env.local up --build -d
 ```
@@ -327,8 +368,8 @@ La app queda expuesta en **http://localhost:3000**.
 
 > El `Dockerfile` es multi-stage: instala dependencias, compila con las variables
 > `NEXT_PUBLIC_*` (build args) y genera una imagen mínima con la salida **standalone**
-> de Next.js. Las variables secretas (`SUPABASE_SERVICE_ROLE_KEY`, AWS…) se inyectan
-> en tiempo de ejecución desde el entorno del contenedor.
+> de Next.js. Las variables secretas (`SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`…)
+> se inyectan en tiempo de ejecución desde el entorno del contenedor.
 
 ---
 
@@ -495,12 +536,9 @@ La app **no requiere cambios de código** para producción: todo es configuraci�
 
 ## 🚀 6b. Desplegar en Vercel (paso a paso)
 
-**Respuesta corta: sí, es un solo despliegue.** La app es **monolítica** (Next.js):
-un único proyecto de Vercel sirve el **frontend y el backend a la vez** (tu "backend"
-son las API Routes de `src/app/api/*`, que corren igual dentro de Vercel como funciones
-serverless). **La base de datos no se despliega**: sigue viviendo en Supabase (es un
-servicio externo gestionado); Vercel solo se conecta a ella con las variables. Hay un
-cron diario aparte que se programa en Supabase (sección 7).
+> 📘 **Respuesta corta: sí, es un solo despliegue** — solo este repo en Vercel; la BD
+> (Supabase) se configura, no se despliega. La guía completa con TODAS las variables y
+> dónde obtener cada una está en **[`docs/DEPLOY.md`](docs/DEPLOY.md)**. Resumen:
 
 1. **Sube el repo a GitHub** (verde → local).
 2. **vercel.com** → *Add New Project* → importa el repositorio (conecta GitHub).
@@ -578,7 +616,7 @@ Elige **UNA** de las dos formas:
   ```json
   { "ok": true, "reportesDisponibles": 3, "reportesProcesados": 3,
     "llamadasGemini": 12, "coincidencias": 1,
-    "maxCandidatos": 12, "limiteDiario": 200 }
+    "maxCandidatos": 12, "limiteDiario": 1500 }
   ```
 - **401** → el `x-cron-secret` no coincide con `CRON_SECRET` del servidor.
   **503** → falta `CRON_SECRET` en el servidor.
@@ -599,16 +637,16 @@ US$9,00 / millón de salida** (`gemini-3.1-flash-lite`, el más barato: US$0,25 
 **Costo por comparación** (2 fotos ≈ 1.100 tokens de entrada + ~80 de salida):
 ≈ **US$0,0024** con 3.5 Flash (≈ COP 10) y ≈ **US$0,0004** con Flash Lite.
 
-**Factura simulada (MVP: 30 publicaciones/mes → 360 comparaciones):**
+**Factura simulada (30 publicaciones/mes, comparando ~100 candidatos cada una → 3.000 comparaciones):**
 
 | Concepto | Cálculo | Mensual |
 |---|---|---|
-| Gemini (pagado, 3.5 Flash) | 360 × US$0,0024 | **~US$0,86** (COP ≈ 3.600) |
-| Gemini (free tier) | 12/día << límite diario | **$0** |
+| Gemini (pagado, 3.5 Flash) | 3.000 × US$0,0024 | **~US$7,2** (COP ≈ 30.000) |
+| Gemini (si usas Flash Lite) | 3.000 × US$0,0004 | **~US$1,2** |
 | Brevo (free) | 2 correos/match × ≤300/día | **$0** |
 | Supabase (free tier) | fotos ≤ 200 KB | **$0** |
 | Vercel (Hobby) | hosting frontend + API | **$0** |
-| **Total** | — | **$0/mes** (o ~US$0,86 si se paga) |
+| **Total (3.5 Flash)** | — | **~US$7,2/mes** |
 
 Escenarios de crecimiento, tablas por modelo y cómo se controlan los costos en
 [`docs/costos.md`](docs/costos.md).
@@ -644,9 +682,11 @@ Flujo unificado para Dueño (`PERDIDO`) y Rescatista (`BUSCA_DUEÑO`):
 5. **Guarda** el reporte en `perritos` (con `foto_url`, `departamento` y municipio de la
    lista DANE de Colombia). El `usuarios` queda ligado a la sesión. **La publicación nunca
    depende de la IA**: cualquier foto (perros, gatos, calidad regular) se acepta.
-6. **Gemini Flash** compara la foto contra hasta **12 reportes ACTIVOS de rol opuesto**
-   (misma ciudad → departamento → resto del país, más recientes) pidiendo un dictamen
-   JSON `{es_mismo, similitud, razon}`. Cada par se guarda en `comparaciones` (dedupe).
+6. **Gemini Flash** compara la foto contra **todos los reportes ACTIVOS de rol opuesto**
+   de la misma especie (**hasta 300**, misma ciudad → departamento → resto del país,
+   más recientes) pidiendo un dictamen JSON `{es_mismo, similitud, razon}`. Cada par se
+   guarda en `comparaciones` (dedupe). El match corre en background: la publicación
+   responde ~3 s y el cliente hace polling a `GET /api/matches-para` (~90 s).
 7. Si hay un **match válido** (`es_mismo` y similitud **≥ 80 %**):
    - Registra el par en `matches_ia` **sin cambiar ningún estado** y crea
      **notificaciones web** para ambas partes (tabla `notificaciones`; 🔔 bandeja de
@@ -661,8 +701,9 @@ Flujo unificado para Dueño (`PERDIDO`) y Rescatista (`BUSCA_DUEÑO`):
    - Responde `{ "match": true, "matchInfo": { perrito, usuario, porcentaje_similitud } }`
      (datos de contacto SOLO si la contraparte ya había autorizado antes).
 8. **Además**: la revisión diaria (`POST /api/revisar-coincidencias`) re-cruza cada día
-   los reportes ACTIVOS recientes contra los candidatos aún no comparados (tope de ~200
-   llamadas/día), para que ningún match se pierda aunque haya cientos de publicaciones.
+   los reportes ACTIVOS recientes contra los candidatos aún no comparados (tope de
+   1.500 llamadas/día), para que ningún match se pierda aunque se supere el tope de
+   300 de la publicación (el cron cubre hasta el puesto 500).
 
 ### Marcar como encontrada
 
@@ -767,11 +808,16 @@ Flujo unificado para Dueño (`PERDIDO`) y Rescatista (`BUSCA_DUEÑO`):
 - **IA de mascotas, no de "caras humanas"**: Gemini Flash compara la apariencia del animal
   (especie, raza, color, manchas, tamaño); funciona con perros y gatos a diferencia del
   reconocimiento facial clásico, y nunca rechaza una foto.
-- **Candidatos por cercanía**: se prioriza misma ciudad → departamento → resto del país;
-  cada par comparado se guarda en `comparaciones` para no repetir llamadas a Gemini.
-- **Revisión diaria**: aunque en el instante solo se comparen 12 candidatos, el cron de
-  la migración 005 re-cruza todo lo pendiente dentro de 24 h (nada se pierde con cientos
-  de publicaciones).
+- **Candidatos por cercanía y especie**: se prioriza misma ciudad → departamento →
+  resto del país, siempre de la misma especie (un perro nunca se compara con gatos);
+  al publicar se compara TODO el rol opuesto (hasta 300) y cada par comparado se
+  guarda en `comparaciones` para no repetir llamadas a Gemini.
+- **Match en background al publicar**: la publicación responde ~3 s y el cliente
+  recoge el match con polling a `GET /api/matches-para` (~90 s); el match típico
+  (misma ciudad) aparece en los primeros segundos.
+- **Revisión diaria**: el cron de la migración 005 re-cruza lo pendiente (últimos
+  14 días, 12 candidatos por reporte, dentro del presupuesto de 1.500 llamadas/día)
+  — si algo se salió del tope de 300 instantáneo (puesto 500), se encuentra en 24-48 h.
 - **Auto-coincidencia**: al buscar, se excluye el reporte recién creado y los reportes del
   mismo usuario para no matchear con uno mismo.
 - **Nada se reconcilia solo**: la IA solo registra el par en `matches_ia` y notifica

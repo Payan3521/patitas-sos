@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import { accessTokenHeader, useAuth } from '@/components/AuthProvider';
 import { MatchModal } from '@/components/MatchModal';
@@ -193,6 +193,36 @@ function FormularioPublicar({ perfil }: { perfil: { email: string; nombre: strin
       setSubmitting(false);
     }
   }
+
+  // Polling del match en background: la publicación ya respondió, pero la IA
+  // sigue comparando (hasta 300 candidatos del rol opuesto). Si aparece una
+  // coincidencia, se muestra el mismo modal 🎉 (hasta ~90 s; el match típico,
+  // en la misma ciudad, aparece en los primeros segundos).
+  useEffect(() => {
+    if (!success || !perritoId || matchInfo) return;
+    let cancel = false;
+    let intentos = 0;
+    const intervalo = setInterval(() => {
+      intentos += 1;
+      fetch(`/api/matches-para?perrito_id=${perritoId}`)
+        .then(async (res) => {
+          if (cancel) return;
+          if (!res.ok) return;
+          const data = (await res.json()) as { ok?: boolean; match?: boolean; matchInfo?: MatchInfo };
+          if (data.ok && data.match && data.matchInfo) {
+            setMatchInfo(data.matchInfo);
+          }
+        })
+        .catch(() => {
+          // Sin conexión o error temporal: se sigue intentando.
+        });
+      if (intentos >= 30) clearInterval(intervalo); // ~90 s
+    }, 3_000);
+    return () => {
+      cancel = true;
+      clearInterval(intervalo);
+    };
+  }, [success, perritoId, matchInfo]);
 
   const tabActive =
     (t: Tab) =>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 · Aviso de testigo — SOS PETS × EAM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css?v=27">
+</head>
+<body>
+
+<div class="topstrip">
+  <div class="container">
+    <span>Institución Universitaria EAM — Armenia, Quindío</span>
+    <span class="right">Proyecto académico · Vigilada Mineducación</span>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container head-inner">
+    <a class="brand" href="01-feed.html">
+      <img class="brand-logo" src="../img/sos-pets.png" alt="SOS PETS">
+      <span class="brand-txt"><strong>SOS PETS</strong><small>Red de mascotas · I.U. EAM</small></span>
+    </a>
+    <nav class="nav">
+      <a class="nav-link" href="01-feed.html">Inicio</a>
+      <a class="nav-link" href="03-publicar.html">Publicar</a>
+      <a class="nav-link" href="08-notificaciones.html">Notificaciones <span class="pill">3</span></a>
+      <a class="nav-link" href="09-mis-publicaciones.html">Mis avisos</a>
+      <a class="nav-link" href="11-chat.html">Chat <span class="pill">2</span></a>
+      <a class="btn btn-primary btn-sm" href="07-login.html">Entrar</a>
+    </nav>
+    <details class="mnav">
+      <summary><span></span><span></span><span></span></summary>
+      <div class="mnav-panel">
+        <a href="01-feed.html">Inicio</a>
+        <a href="03-publicar.html">Publicar</a>
+        <a href="08-notificaciones.html">Notificaciones (3)</a>
+        <a href="09-mis-publicaciones.html">Mis avisos</a>
+        <a href="11-chat.html">Chat (2)</a>
+        <a class="btn btn-primary" href="07-login.html">Entrar</a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.4rem; max-width:880px">
+  <div class="section-head">
+    <div>
+      <h1 style="font-size:clamp(1.6rem,3vw,2.1rem); margin-bottom:.2rem">Vi una mascota</h1>
+      <p class="sub">Tu aviso llega directo a la familia. Sin rodeos y sin espera.</p>
+    </div>
+    <span class="badge badge-eam">Paso a paso en ~2 minutos</span>
+  </div>
+
+  <div class="stepper">
+    <div class="step active"><span class="num">1</span>Selecciona</div>
+    <span class="bar"><i style="width:100%"></i></span>
+    <div class="step"><span class="num">2</span>Cuéntanos</div>
+    <span class="bar"><i style="width:0%"></i></span>
+    <div class="step"><span class="num">3</span>Hecho</div>
+  </div>
+
+  <div class="stack-flow">
+    <div class="stack-step">
+      <div class="step-head">Paso 1 · ¿Cuál mascota viste?</div>
+      <div class="stack-flow">
+        <label class="list-item" style="cursor:pointer; display:flex">
+          <input type="radio" name="pet" style="accent-color:var(--blue); width:18px; height:18px; flex:none" checked>
+          <div class="pet-photo tone-sky" style="width:72px; height:64px; border-radius:var(--r-md); aspect-ratio:auto; flex:none">
+            <img class="pawmark" src="../assets/paw.svg" alt="" style="width:48%">
+          </div>
+          <div class="grow">
+            <b>Luna</b> · Perra dorada con correa azul
+            <p class="mb-0 muted" style="font-size:.8rem">El Edén, Armenia · Se perdió hace 2 días · Match 92%</p>
+          </div>
+        </label>
+
+        <label class="list-item" style="cursor:pointer; display:flex">
+          <input type="radio" name="pet" style="accent-color:var(--blue); width:18px; height:18px; flex:none">
+          <div class="pet-photo tone-coral" style="width:72px; height:64px; border-radius:var(--r-md); aspect-ratio:auto; flex:none">
+            <img class="pawmark" src="../assets/paw.svg" alt="" style="width:48%">
+          </div>
+          <div class="grow">
+            <b>Michi</b> · Gato gris, sin collar
+            <p class="mb-0 muted" style="font-size:.8rem">Centro, Armenia · Se perdió hace 1 día</p>
+          </div>
+        </label>
+
+        <label class="list-item" style="cursor:pointer; display:flex">
+          <input type="radio" name="pet" style="accent-color:var(--blue); width:18px; height:18px; flex:none">
+          <div class="pet-photo tone-graphite" style="width:72px; height:64px; border-radius:var(--r-md); aspect-ratio:auto; flex:none">
+            <img class="pawmark" src="../assets/paw.svg" alt="" style="width:48%">
+          </div>
+          <div class="grow">
+            <b>Ninguna de esas / otra</b> · Buscaré en el feed
+            <p class="mb-0 muted" style="font-size:.8rem">Puedes elegir cualquier reporte activo del Quindío</p>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+
+    <div class="stack-step">
+      <div class="step-head">Paso 2 · Cuéntanos qué viste</div>
+      <div class="form-grid" style="max-width:760px">
+        <div class="field">
+          <label>¿Cuándo la viste?</label>
+          <input class="input" type="date" value="2026-08-14">
+        </div>
+        <div class="field">
+          <label>¿A qué hora aproximadamente?</label>
+          <input class="input" type="time" value="17:20">
+        </div>
+        <div class="field full">
+          <label>Lugar exacto</label>
+          <div class="map-demo">
+            <div class="pin">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.3-7-11a7 7 0 0 1 14 0c0 5.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+              <span>Barrio El Edén, detrás de la cancha</span>
+            </div>
+            <span class="mlabel">Mapa interactivo en la versión final · por ahora elige el sector</span>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Detalles rápidos</label>
+          <div class="chips">
+            <button class="chip active" type="button">Estaba sola</button>
+            <button class="chip" type="button">Con correa</button>
+            <button class="chip" type="button">Se veía asustada</button>
+            <button class="chip" type="button">Se dejaba acercar</button>
+            <button class="chip" type="button">Iba hacia…</button>
+          </div>
+        </div>
+        <div class="field full">
+          <label>¿Algo más que ayude? (opcional)</label>
+          <textarea class="textarea" placeholder="Ej. se movía rápido hacia la vía a Calarcá, no tenía placa visible…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+
+    <div class="stack-step">
+      <div class="step-head">Paso 3 · Confirma y envía</div>
+      <div class="success-card" style="max-width:none">
+        <div class="icon-disk"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <h2 style="font-size:1.4rem">¡Gracias por mirar por Luna!</h2>
+        <p class="muted">Tu aviso ya viajó a Valentina por WhatsApp, correo y notificación. Si se confirma el reencuentro, ambos recibirán la buena noticia.</p>
+        <div style="display:flex; gap:.6rem; justify-content:center; flex-wrap:wrap">
+          <a class="btn btn-primary" href="11-chat.html">Hablar con el dueño</a>
+          <a class="btn btn-ghost" href="01-feed.html">Volver al feed</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container foot-grid">
+    <div class="foot-brand">
+      <img class="foot-logo" src="../img/sos-pets.png" alt="SOS PETS">
+      <p>SOS PETS es un proyecto académico de la Institución Universitaria EAM en Armenia (Quindío): une a los vecinos para que las mascotas perdidas vuelvan a casa.</p>
+      <div class="brand-mark-row"><img class="foot-mark" src="../assets/eam-logo.svg" alt="Institución Universitaria EAM"><img class="foot-mark" src="../img/innlab.png" alt="Grupo de investigación InnLab"></div>
+    </div>
+    <div class="foot-col">
+      <h4>La app</h4>
+      <a href="01-feed.html">Avisos cerca de ti</a>
+      <a href="03-publicar.html">Publicar reporte</a>
+      <a href="12-aviso-testigo.html">Soy testigo</a>
+      <a href="11-chat.html">Chat con vecinos</a>
+    </div>
+    <div class="foot-col">
+      <h4>Ayuda</h4>
+      <a href="05-match-modal.html">¿Cómo funciona el match?</a>
+      <a href="07-login.html">Mi cuenta</a>
+      <a href="10-consentimiento.html">Privacidad y datos</a>
+      <a href="#">Consejos para la búsqueda</a>
+    </div>
+    <div class="foot-col">
+      <h4>Institucional</h4>
+      <a href="#">Institución Universitaria EAM</a>
+      <a href="#">Vigilada Mineducación</a>
+      <a href="#">Proyectos de aula</a>
+      <a href="#">Contacto</a>
+    </div>
+  </div>
+  <div class="container foot-bottom">
+    <span>© 2026 SOS PETS · I.U. EAM — Mockup de diseño (HTML + CSS puro).</span>
+    <span>Hecho con amor en Armenia, Quindío.</span>
+  </div>
+</footer>
+
+</body>
+</html>

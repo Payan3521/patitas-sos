@@ -24,7 +24,8 @@ import { createServerSupabase } from '@/lib/supabase-server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const TOTAL_REPORTES_POR_EJECUCION = 40;
+/** Reportes ACTIVOS recientes que revisa cada ejecución del cron. */
+const TOTAL_REPORTES_POR_EJECUCION = 80;
 
 export async function POST(request: NextRequest) {
   if (!CRON_SECRET) {

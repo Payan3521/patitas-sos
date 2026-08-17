@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 · Iniciar sesión — SOS PETS × EAM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css?v=27">
+</head>
+<body>
+
+<div class="topstrip">
+  <div class="container">
+    <span>Institución Universitaria EAM — Armenia, Quindío</span>
+    <span class="right">Proyecto académico · Vigilada Mineducación</span>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container head-inner">
+    <a class="brand" href="01-feed.html">
+      <img class="brand-logo" src="../img/sos-pets.png" alt="SOS PETS">
+      <span class="brand-txt"><strong>SOS PETS</strong><small>Red de mascotas · I.U. EAM</small></span>
+    </a>
+    <nav class="nav">
+      <a class="nav-link" href="01-feed.html">Inicio</a>
+      <a class="nav-link" href="03-publicar.html">Publicar</a>
+      <a class="nav-link" href="08-notificaciones.html">Notificaciones <span class="pill">3</span></a>
+      <a class="nav-link" href="09-mis-publicaciones.html">Mis avisos</a>
+      <a class="nav-link" href="11-chat.html">Chat <span class="pill">2</span></a>
+      <a class="btn btn-primary btn-sm active" href="07-login.html">Entrar</a>
+    </nav>
+    <details class="mnav">
+      <summary><span></span><span></span><span></span></summary>
+      <div class="mnav-panel">
+        <a href="01-feed.html">Inicio</a>
+        <a href="03-publicar.html">Publicar</a>
+        <a href="08-notificaciones.html">Notificaciones (3)</a>
+        <a href="09-mis-publicaciones.html">Mis avisos</a>
+        <a href="11-chat.html">Chat (2)</a>
+        <a class="btn btn-primary" href="07-login.html">Entrar</a>
+      </div>
+    </details>
+  </div>
+</header>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div style="text-align:center; margin-bottom:1.2rem">
+      <img src="../assets/paw.svg" alt="" style="width:44px;height:44px; margin-inline:auto; filter:invert(28%) sepia(89%) saturate(3624%) hue-rotate(195deg) brightness(94%) contrast(101%); opacity:.9">
+      <h1 style="font-size:1.5rem; margin:.6rem 0 .2rem">Bienvenido de vuelta</h1>
+      <p class="muted mb-0" style="font-size:.88rem">Tu red de vecinos sigue buscando por ti.</p>
+    </div>
+
+    <div class="tabs">
+      <a class="active" href="#">Iniciar sesión</a>
+      <a href="#">Registrarme</a>
+    </div>
+
+    <form class="form-grid" onsubmit="return false;">
+      <div class="field full">
+        <label>Celular o correo</label>
+        <input class="input" placeholder="311 234 5678">
+      </div>
+      <div class="field full">
+        <label>Contraseña</label>
+        <input class="input" type="password" placeholder="••••••••">
+        <span class="hint">¿Olvidaste tu contraseña? <a href="#">Recupérala</a></span>
+      </div>
+      <div class="field full" style="flex-direction:row; align-items:center; justify-content:space-between">
+        <label class="check-row mb-0" style="margin:0"><input type="checkbox" checked>Recordarme</label>
+        <a class="demo-note" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>Mockup: no envía datos</a>
+      </div>
+      <a class="btn btn-primary btn-lg full" href="01-feed.html">Entrar</a>
+    </form>
+
+    <div class="divider">o continúa con</div>
+
+    <a class="btn btn-whatsapp" style="width:100%" href="#">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 1 1-4.2 15.3l-.5-.3-3 .8.8-2.9-.3-.5A8.2 8.2 0 0 1 12 3.8zm-3.2 4c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.4 2.4 1 2.9.8 3.4.8.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4l-2-1c-.3-.1-.5-.2-.7.1l-1 1.2c-.2.2-.3.2-.6.1a7 7 0 0 1-2.7-1.7 9 9 0 0 1-1.4-1.8c-.1-.3 0-.4.1-.6l.6-.7c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-1-2.3c-.2-.6-.5-.5-.7-.5z"/></svg>
+      Entrar con WhatsApp
+    </a>
+
+    <p class="muted text-center mb-0" style="font-size:.78rem; margin-top:1rem">
+      Al continuar aceptas el <a href="10-consentimiento.html">tratamiento de datos</a> y el uso de tu contacto solo para reunir mascotas con su familia.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

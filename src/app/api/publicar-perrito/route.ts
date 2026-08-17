@@ -30,7 +30,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { FOTOS_BUCKET, MAX_IMAGE_BYTES } from '@/lib/constants';
+import { FOTOS_BUCKET, GEMINI_MAX_CANDIDATOS_PUBLICACION, MAX_IMAGE_BYTES } from '@/lib/constants';
 import { buscarCoincidenciasPara } from '@/lib/matcher';
 import { contactoVisible } from '@/lib/permisos';
 import { leerSesion } from '@/lib/auth';
@@ -143,10 +143,33 @@ export async function POST(request: NextRequest) {
       return json({ ok: false, error: 'No pudimos guardar el reporte. Intenta de nuevo.' }, 500);
     }
 
-    // --- 6. Buscar coincidencias con Gemini Flash ---
-    //     El match NO toca los estados: solo registra el par y avisa por correo.
+    // --- 6. Buscar coincidencias con Gemini Flash (en background) ---
+    //     La publicación responde al instante: esperamos la IA SOLO hasta
+    //     ~3 s (si la primera ronda alcanza, el modal de match sale en la
+    //     misma respuesta); si no, sigue corriendo en segundo plano y el
+    //     cliente hace polling a GET /api/matches-para (~90 s) mientras se
+    //     comparan TODOS los candidatos del rol opuesto (hasta 300, ranking
+    //     por cercanía). Si nada termina, el cron diario y las notificaciones
+    //     web/correo lo cubren.
+    //     El match NO toca los estados: solo registra el par y avisa.
     //     Si la IA falla, el reporte ya quedó publicado (match: false).
-    const match = await buscarCoincidenciasPara(supabase, perritoId);
+    const promesaMatch = buscarCoincidenciasPara(supabase, perritoId, {
+      maxCandidatos: GEMINI_MAX_CANDIDATOS_PUBLICACION,
+    });
+    let match: Awaited<ReturnType<typeof buscarCoincidenciasPara>> = null;
+    try {
+      match = await Promise.race([
+        promesaMatch,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000)),
+      ]);
+    } catch {
+      match = null;
+    }
+    if (!match) {
+      // Background: el trabajo sigue (descarga de fotos + Gemini) aunque la
+      // request ya haya respondido; el polling del cliente lo recoge.
+      void promesaMatch.catch((error) => console.error('Match en background falló:', error));
+    }
 
     if (match) {
       // 🔒 Privacidad: el contacto de la contraparte solo viaja si ella

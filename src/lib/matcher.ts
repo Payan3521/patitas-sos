@@ -5,10 +5,12 @@
 //  - POST /api/publicar-perrito  (match inmediato al publicar)
 //  - POST /api/revisar-coincidencias (revisión diaria por cron)
 //
-// Flujo: candidatos ACTIVOS de rol opuesto (misma ciudad →
-// departamento → resto del país) → comparación con Gemini →
-// registro en `comparaciones` → los que pasan el umbral entran
-// en `matches_ia` + notificaciones web + correos.
+// Flujo: candidatos ACTIVOS de rol opuesto de la MISMA especie (misma ciudad →
+// departamento → resto del país) → comparación con Gemini en lotes paralelos →
+// registro en `comparaciones` → los que pasan el umbral entran en `matches_ia`
+// + notificaciones web + correos. Al publicar se comparan hasta
+// GEMINI_MAX_CANDIDATOS_PUBLICACION (todo el rol opuesto, match "de una");
+// el cron diario usa 12 por reporte con dedupe por `comparaciones`.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -48,6 +50,12 @@ export interface OpcionesBusqueda {
   limiteLlamadas?: number;
   /** Contador compartido para respetar el límite diario del free tier. */
   contador?: ContadorLlamadas;
+  /**
+   * Máximo de candidatos a comparar. Al publicar se pasa
+   * GEMINI_MAX_CANDIDATOS_PUBLICACION (300: compara todo el rol opuesto);
+   * el cron usa el default GEMINI_MAX_CANDIDATOS (12 por reporte).
+   */
+  maxCandidatos?: number;
 }
 
 const esperar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,7 +65,20 @@ function esErrorDeCuota(error: unknown): boolean {
   return /429|RESOURCE_EXHAUSTED|quota|rate limit/i.test(mensaje);
 }
 
-/** Llama a Gemini con 1 reintento ante cuotas (429) o fallos transitorios. */
+/**
+ * Extrae del 429 de Google el tiempo sugerido de espera
+ * ("Please retry in 8.5s") para no martillar el límite de RPM.
+ */
+function retryInSegundos(error: unknown): number {
+  const mensaje = error instanceof Error ? error.message : String(error);
+  const coincidencia = mensaje.match(/retry in ([\d.]+)s/i);
+  if (!coincidencia) return 5;
+  const segundos = Number.parseFloat(coincidencia[1]);
+  return Number.isFinite(segundos) ? segundos : 5;
+}
+
+/** Llama a Gemini con 1 reintento ante cuotas (429) o fallos transitorios,
+ *  esperando el tiempo que Google indique cuando hay límite de RPM. */
 async function llamarConReintento(
   fn: () => Promise<ComparacionFoto>,
   contador?: ContadorLlamadas,
@@ -74,10 +95,9 @@ async function llamarConReintento(
     } catch (error) {
       const cuota = esErrorDeCuota(error);
       if (intento === 1) {
-        await esperar(cuota ? 5_000 : 1_000);
+        await esperar(cuota ? Math.min(retryInSegundos(error), 60) : 1_000);
         continue;
       }
-      if (cuota) throw error;
       throw error;
     }
   }
@@ -100,13 +120,16 @@ async function descargarFoto(perrito: PerritoConUsuario): Promise<Uint8Array> {
 
 /**
  * Busca los candidatos ACTIVOS de rol opuesto para un reporte,
+ * filtrados por la MISMA especie (comparar un perro contra gatos
+ * gasta llamadas y añade ruido: el modelo siempre diría que no),
  * ordenados por cercanía (misma ciudad → mismo departamento → resto
- * del país) y luego por más recientes.
+ * del país) y luego por más recientes, hasta `maxCandidatos`.
  */
 async function obtenerCandidatos(
   supabase: SupabaseClient,
   perrito: PerritoConUsuario,
   saltarComparadas: boolean,
+  maxCandidatos: number,
 ): Promise<PerritoConUsuario[]> {
   const rolOpuesto = perrito.rol_publicacion === 'PERDIDO' ? 'BUSCA_DUEÑO' : 'PERDIDO';
 
@@ -114,11 +137,12 @@ async function obtenerCandidatos(
     .from('perritos')
     .select('*, usuario:usuarios(id, nombre, telefono, email)')
     .eq('rol_publicacion', rolOpuesto)
+    .eq('especie', perrito.especie)
     .eq('estado', 'ACTIVO')
     .neq('id', perrito.id)
     .neq('usuario_id', perrito.usuario_id)
     .order('creado_en', { ascending: false })
-    .limit(GEMINI_MAX_CANDIDATOS * 4);
+    .limit(Math.min(maxCandidatos * 4, 1500));
 
   if (error) throw error;
   const candidatos = (data ?? []) as PerritoConUsuario[];
@@ -142,7 +166,7 @@ async function obtenerCandidatos(
 
   return filtrados
     .sort((x, y) => cercania(x) - cercania(y) || y.creado_en.localeCompare(x.creado_en))
-    .slice(0, GEMINI_MAX_CANDIDATOS);
+    .slice(0, maxCandidatos);
 }
 
 /** Registra el resultado de una comparación (dedupe por par canónico). */
@@ -287,6 +311,7 @@ export async function buscarCoincidenciasPara(
 ): Promise<ResultadoMatch | null> {
   const contador = opciones.contador ?? { usadas: 0 };
   const limiteLlamadas = opciones.limiteLlamadas ?? GEMINI_LIMITE_DIARIO;
+  const maxCandidatos = opciones.maxCandidatos ?? GEMINI_MAX_CANDIDATOS;
 
   try {
     const { data: perrito } = await supabase
@@ -297,7 +322,7 @@ export async function buscarCoincidenciasPara(
     if (!perrito || perrito.estado !== 'ACTIVO') return null;
     const reporte = perrito as PerritoConUsuario;
 
-    const candidatos = await obtenerCandidatos(supabase, reporte, opciones.saltarComparadas ?? false);
+    const candidatos = await obtenerCandidatos(supabase, reporte, opciones.saltarComparadas ?? false, maxCandidatos);
     if (candidatos.length === 0) return null;
 
     const fotoA = await descargarFoto(reporte);
